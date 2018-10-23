@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "getmesh.fullname" . }}-config
+  labels:
+    app: {{ template "getmesh.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+data:
+{{ (.Files.Glob "config/security.json").AsConfig | indent 2 }}
+{{ (.Files.Glob "config/automatic-backup.json").AsConfig | indent 2 }}
+{{ (.Files.Glob "config/*.xml").AsConfig | indent 2 }}
+{{ (.Files.Glob "config/*.js").AsConfig | indent 2 }}
+{{ (.Files.Glob "config/*.yml").AsConfig | indent 2 }}
+  default-distributed-db-config.json: |-
+{{- $file := .Files.Get "config/default-distributed-db-config.json" | indent 6 }}
+{{ tpl $file . }}
+
+  init-master-node.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    whoami
+    ls -alrth /
+    chown 1000:1000 /uploads
+    echo 'rm distributed-config to force cluster reinitialization (no impact on exiting data)'
+    rm -f /graphdb/storage/distributed-config.json
+
+    echo 'init done'
+
+  #quick hack to get meshNode name equals to pod name (and with statefulset we always get pod same names)
+  #+ add hazelcast k8s jar in classpath
+  startup-master-node.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    ls -alrth
+    export MESH_NODE_NAME=$HOSTNAME
+    exec java -Xmx{{ .Values.java.xmx }} -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=true -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner -initCluster
+
+  init-slave-node.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    whoami
+    ls -alrth /
+    chown 1000:1000 /uploads
+
+    until nslookup {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
+    do echo waiting for hazelcast $(date)
+    sleep 2
+    echo 'init done'
+    done
+
+  startup-slave-node.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    ls -alrth
+    export MESH_NODE_NAME=$HOSTNAME
+    exec java -Xmx{{ .Values.java.xmx }} -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=true -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
+
+
+binaryData:
+  keystore.jceks: |-
+{{ .Files.Get "config/keystore.jceks" | b64enc | indent 6 }}

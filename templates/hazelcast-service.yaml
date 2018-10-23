@@ -1,0 +1,20 @@
+#see https://github.com/hazelcast/hazelcast-kubernetes
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "getmesh.fullname" . }}-hazelcast
+  labels:
+    app: {{ template "getmesh.name" . }}
+    chart: {{ template "getmesh.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 5701
+    targetPort: hazelcast
+  selector:
+    release: {{ .Release.Name }}
+    #role: master
+    app: {{ template "getmesh.name" . }}

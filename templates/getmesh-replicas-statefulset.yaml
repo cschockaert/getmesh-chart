@@ -1,0 +1,136 @@
+{{- if .Values.mesh.cluster.enabled }}
+apiVersion: apps/v1beta2
+kind: StatefulSet
+metadata:
+  name: {{ template "getmesh.fullname" . }}-replicas
+  labels:
+    app: {{ template "getmesh.name" . }}
+    chart: {{ template "getmesh.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.mesh.cluster.replicas }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      role: replicas
+      app: {{ template "getmesh.name" . }}
+  serviceName: "getmesh-replicas"
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        role: replicas
+        app: {{ template "getmesh.name" . }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      initContainers:
+      - name: init
+        image: alpine
+        command: ["/bin/sh", "init-slave-node.sh"]
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: getmesh-uploads
+          mountPath: "/uploads"
+          subPath: {{ template "getmesh.fullname" . }}-uploads
+        - name: getmesh-config
+          mountPath: /init-slave-node.sh
+          subPath: init-slave-node.sh
+        - name: getmesh-data
+          mountPath: "/graphdb"
+          subPath: "graphdb"
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/sh", "/config/startup-slave-node.sh"]
+        env:
+         - name: "hazelcast.kubernetes.service-dns"
+           value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
+         - name: MESH_CLUSTER_ENABLED # replica cannot work without cluster
+           value: "true"
+         - name: MESH_CLUSTER_NAME
+           value: {{ .Values.mesh.cluster.name | quote }}
+         - name: MESH_ELASTICSEARCH_START_EMBEDDED # replica cannot work without external elasticsearch
+           value: "false"
+         - name: MESH_AUTH_KEYSTORE_PATH
+           value: "/config/keystore.jceks"
+         - name: MESH_BINARY_DIR
+           value: "/uploads"
+         - name: MESH_ELASTICSEARCH_URL
+           value: {{ tpl .Values.elasticsearch.url . | quote }}
+        ports:
+          - name: http
+            containerPort: 8080
+            protocol: TCP
+          - name: obinary
+            containerPort: 2424
+            protocol: TCP
+          - name: ohttp
+            containerPort: 2480
+            protocol: TCP
+          - name: hazelcast
+            containerPort: 5701
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /api/v1/admin/status
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          failureThreshold: 4
+        readinessProbe:
+          httpGet:
+            path: /api/v1/admin/status
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          failureThreshold: 4
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+        volumeMounts:
+          - name: getmesh-uploads
+            mountPath: "/uploads"
+            subPath: {{ template "getmesh.fullname" . }}-uploads
+          - name: getmesh-config
+            mountPath: "/config"
+          - name: getmesh-data
+            mountPath: "/graphdb"
+            subPath: "graphdb"
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000 #user to run used by getmesh official image, if not setted we got some filesystem errors at startup
+      volumes:
+      - name: getmesh-config
+        configMap:
+          name: {{ template "getmesh.fullname" . }}-config
+      {{- if .Values.persistence.enabled }}
+      - name: getmesh-uploads
+        persistentVolumeClaim:
+          claimName: {{ template "getmesh.fullname" . }}-uploads
+      {{- else }}
+      - name: getmesh-uploads
+        emptyDir: {}
+      {{- end }}
+      - name: getmesh-data
+        emptyDir: {}
+
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: role
+                  operator: In
+                  values:
+                  - replicas
+              topologyKey: kubernetes.io/hostname
+
+{{- end}}

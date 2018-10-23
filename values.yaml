@@ -1,0 +1,76 @@
+# Default values for getmesh.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+image:
+  repository: gentics/mesh
+  tag: 0.27.0
+  pullPolicy: IfNotPresent
+
+global:
+  domain: yourdomain.net
+
+ingress:
+  enabled: true
+  tls: true
+  acme: false #if true will generate https certificate via letsencrypt, your GKE cluster must support this feature
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+   limits:
+    cpu: 2000m
+    memory: 4096Mi
+   requests:
+    cpu: 500m
+    memory: 2048Mi
+
+persistence:
+  enabled: true
+
+  ## A manually managed Persistent Volume and Claim
+  ## Requires persistence.enabled: true
+  ## If defined,  PVC must be created manually before volume will be bound
+  # existingClaim:
+
+  ## getmesh master data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  # storageClass: "-"
+  accessModes:
+  - ReadWriteOnce
+  size: 5Gi
+
+  # nfs informations can be retreive with cmd
+  # gcloud beta filestore instances list --project=project-id
+  # nfs is used only is persistence is enabled
+  # nfs is used to mount uploads volume (shared between master and replicas)
+  # nfs is MANDATORY when using mesh.cluster with replicas
+  nfs:
+    enabled: true # if false a regular volume will be used (NB: so binaries uploads will not be shared among getmesh instances)
+    storage: 10Gi
+    path: /default #NFS SERVER PATH
+    server: 10.63.3.26 #NFS SERVER IP
+
+
+
+mesh:
+  cluster:
+    enabled: true #NB: if cluster enabled nfs persistence SHOULD be enabled too
+    replicas: 2 #if cluster enabled is false set replicas count to 0
+    name: default
+
+elasticsearch:
+  enabled: true #if not enabled, es will be started in getmesh container, else es will be started outside using official elasticsearch chart
+  # getmesh use elasticsearch-oss 6.1.4
+  image:
+    tag: 6.1.4
+  url: http://{{ .Release.Name }}-elasticsearch-client:9200
+
+java:
+  xmx: 2048m

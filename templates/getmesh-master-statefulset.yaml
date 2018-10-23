@@ -1,0 +1,162 @@
+apiVersion: apps/v1beta2
+kind: StatefulSet
+metadata:
+  name: {{ template "getmesh.fullname" . }}-master
+  labels:
+    app: {{ template "getmesh.name" . }}
+    chart: {{ template "getmesh.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1 # we use only 1 master and X replicas in this chart
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      role: master
+      app: {{ template "getmesh.name" . }}
+  serviceName: "getmesh-master"
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        role: master
+        app: {{ template "getmesh.name" . }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      initContainers:
+      - name: init
+        image: alpine
+        command: ["/bin/sh", "init-master-node.sh"]
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: getmesh-uploads
+          mountPath: "/uploads"
+          subPath: {{ template "getmesh.fullname" . }}-uploads
+        - name: getmesh-config
+          mountPath: /init-master-node.sh
+          subPath: init-master-node.sh
+        - name: getmesh-data-master
+          mountPath: "/graphdb"
+          subPath: "graphdb"
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/sh", "/config/startup-master-node.sh"]
+        env:
+         - name: "hazelcast.kubernetes.service-dns"
+           value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
+         - name: MESH_CLUSTER_ENABLED
+           value: {{ .Values.mesh.cluster.enabled | quote }}
+         - name: MESH_CLUSTER_NAME
+           value: {{ .Values.mesh.cluster.name | quote }}
+         - name: MESH_ELASTICSEARCH_START_EMBEDDED
+           value: {{ not .Values.elasticsearch.enabled | quote }}
+         - name: MESH_AUTH_KEYSTORE_PATH
+           value: "/config/keystore.jceks"
+         - name: MESH_BINARY_DIR
+           value: "/uploads"
+        {{- if .Values.elasticsearch.enabled }}
+         - name: MESH_ELASTICSEARCH_URL
+           value: {{ tpl .Values.elasticsearch.url . | quote }}
+        {{- end }}
+        ports:
+          - name: http
+            containerPort: 8080
+            protocol: TCP
+          - name: obinary
+            containerPort: 2424
+            protocol: TCP
+          - name: ohttp
+            containerPort: 2480
+            protocol: TCP
+          - name: hazelcast
+            containerPort: 5701
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /api/v1/admin/status
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          failureThreshold: 10
+        #master readinessProbe is associated to hazelcast port vs replica readiness is associated to status
+        readinessProbe:
+          tcpSocket:
+            {{- if .Values.mesh.cluster.enabled }}
+            port: hazelcast
+            {{- else }}
+            port: http
+            {{- end }}
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          failureThreshold: 10
+
+        resources:
+{{ toYaml .Values.resources | indent 12 }}
+        volumeMounts:
+          - name: getmesh-uploads
+            mountPath: "/uploads"
+            subPath: {{ template "getmesh.fullname" . }}-uploads
+          - name: getmesh-config
+            mountPath: "/config"
+          - name: getmesh-data-master
+            mountPath: "/elasticsearch/data"
+            subPath: "elasticsearch"
+          - name: getmesh-data-master
+            mountPath: "/graphdb"
+            subPath: "graphdb"
+          - name: getmesh-data-master
+            mountPath: "/backups"
+            subPath: "backup"
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000 #user to run used by getmesh official image, if not setted we got some filesystem errors at startup
+      volumes:
+      - name: getmesh-config
+        configMap:
+          name: {{ template "getmesh.fullname" . }}-config
+      {{- if not .Values.persistence.enabled }}
+      - name: getmesh-data-master
+        emptyDir: {}
+      - name: getmesh-uploads
+        emptyDir: {}
+      {{- else }}
+      - name: getmesh-uploads
+        persistentVolumeClaim:
+          claimName: {{ template "getmesh.fullname" . }}-uploads
+      {{- if .Values.persistence.existingClaim }}
+      - name: getmesh-data-master
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.data.existingClaim }}
+      {{- else }}
+  volumeClaimTemplates:
+    - metadata:
+        name: getmesh-data-master
+        labels:
+          app: {{ template "getmesh.name" . }}
+          chart: {{ template "getmesh.chart" . }}
+          release: {{ .Release.Name }}
+          heritage: {{ .Release.Service }}
+      spec:
+        accessModes:
+        {{- range .Values.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+      {{- if .Values.persistence.storageClass }}
+      {{- if (eq "-" .Values.persistence.storageClass) }}
+        storageClassName: ""
+      {{- else }}
+        storageClassName: {{ .Values.persistence.storageClass | quote }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}

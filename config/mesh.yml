@@ -1,0 +1,49 @@
+---
+defaultMaxDepth: 10
+defaultLanguage: "en"
+updateCheck: true #MESH_UPDATECHECK
+vertxOptions:
+  workerPoolSize: 20
+  eventPoolSize: 8
+tempDirectory: "data/tmp"
+nodeName: "Undulating Luvdisc" #MESH_NODE_NAME
+httpServer:
+  port: 8080
+  host: "0.0.0.0"
+  corsAllowedOriginPattern: ""
+  corsAllowCredentials: false
+  enableCors: false
+cluster: #MESH_CLUSTER_NAME #MESH_CLUSTER_NETWORK_HOST
+  enabled: false #MESH_CLUSTER_ENABLED
+  vertxPort: 4848 #MESH_CLUSTER_VERTX_PORT=4848 https://github.com/gentics/mesh/issues/519
+  networkHost: "0.0.0.0"
+storage:
+  directory: "/graphdb"
+  backupDirectory: "/backups" #MESH_GRAPH_BACKUP_DIRECTORY
+  exportDirectory: "data/export"
+  startServer: false
+  parameters: {}
+search:
+  url: "http://localhost:9200" #MESH_ELASTICSEARCH_URL
+  timeout: 8000
+  startupTimeout: 180
+  startEmbedded: true #MESH_ELASTICSEARCH_START_EMBEDDED
+  embeddedArguments: "-Xms1g -Xmx1g -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75\
+    \ -XX:+UseCMSInitiatingOccupancyOnly -XX:+AlwaysPreTouch -client -Xss1m -Djava.awt.headless=true\
+    \ -Dfile.encoding=UTF-8 -Djna.nosys=true -XX:-OmitStackTraceInFastThrow -Dio.netty.noUnsafe=true\
+    \ -Dio.netty.noKeySetOptimization=true -Dio.netty.recycler.maxCapacityPerThread=0\
+    \ -Dlog4j.shutdownHookEnabled=false -Dlog4j2.disable.jmx=true -XX:+HeapDumpOnOutOfMemoryError"
+upload:
+  byteLimit: 262144000
+  directory: "/uploads" #MESH_BINARY_DIR
+  tempDirectory: "data/tmp/file-uploads"
+security:
+  tokenExpirationTime: 3600
+  keystorePassword: "random-string-to-generate"
+  keystorePath: "/config/keystore.jceks" #MESH_AUTH_KEYSTORE_PATH
+  algorithm: "HS256"
+  enableAnonymousAccess: true
+image:
+  imageCacheDirectory: "data/binaryImageCache"
+  maxWidth: 2048
+  maxHeight: 2048
