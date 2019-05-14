@@ -1,3 +1,4 @@
 charts/
 config/keystore.jceks
 .idea/
+secrets/

@@ -1,5 +1,5 @@
 {{- if .Values.mesh.cluster.enabled }}
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "getmesh.fullname" . }}-replicas
@@ -23,20 +23,24 @@ spec:
         role: replicas
         app: {{ template "getmesh.name" . }}
     spec:
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 15
       initContainers:
       - name: init
         image: alpine
-        command: ["/bin/sh", "init-slave-node.sh"]
+        command: ["/bin/sh", "/config/init-slave-node.sh"]
         securityContext:
           runAsUser: 0
         volumeMounts:
+        {{- if and (eq .Values.persistence.nfs.enabled false) (eq .Values.persistence.enabled true) }}
+        # in this particuliar case (persistance without nfs) we use getmesh-data-master to store uploads
+        - name: getmesh-data-master
+        {{- else }}
         - name: getmesh-uploads
+        {{- end }}
           mountPath: "/uploads"
-          subPath: {{ template "getmesh.fullname" . }}-uploads
+          subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
         - name: getmesh-config
-          mountPath: /init-slave-node.sh
-          subPath: init-slave-node.sh
+          mountPath: /config
         - name: getmesh-data
           mountPath: "/graphdb"
           subPath: "graphdb"
@@ -51,7 +55,7 @@ spec:
          - name: MESH_CLUSTER_ENABLED # replica cannot work without cluster
            value: "true"
          - name: MESH_CLUSTER_NAME
-           value: {{ .Values.mesh.cluster.name | quote }}
+           value: cluster-{{ template "getmesh.version.slug" . }}
          - name: MESH_ELASTICSEARCH_START_EMBEDDED # replica cannot work without external elasticsearch
            value: "false"
          - name: MESH_AUTH_KEYSTORE_PATH
@@ -60,6 +64,10 @@ spec:
            value: "/uploads"
          - name: MESH_ELASTICSEARCH_URL
            value: {{ tpl .Values.elasticsearch.url . | quote }}
+        {{- range $name, $value := .Values.mesh.additionalEnvironmentVariables }}
+         - name: {{ tpl $name $ }}
+           value: {{ tpl $value $ }}
+        {{- end }}
         ports:
           - name: http
             containerPort: 8080
@@ -75,24 +83,24 @@ spec:
             protocol: TCP
         livenessProbe:
           httpGet:
-            path: /api/v1/admin/status
+            path: {{ .Values.livenessProbe.httpGet.path | default "/api/v1/" }}
             port: http
           initialDelaySeconds: 60
           periodSeconds: 15
           failureThreshold: 4
         readinessProbe:
           httpGet:
-            path: /api/v1/admin/status
+            path: {{ .Values.readinessProbe.httpGet.path | default "/api/v1/admin/status" }}
             port: http
-          initialDelaySeconds: 60
+          initialDelaySeconds: 45
           periodSeconds: 15
-          failureThreshold: 4
+          failureThreshold: 5
         resources:
 {{ toYaml .Values.resources | indent 12 }}
         volumeMounts:
           - name: getmesh-uploads
             mountPath: "/uploads"
-            subPath: {{ template "getmesh.fullname" . }}-uploads
+            subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
           - name: getmesh-config
             mountPath: "/config"
           - name: getmesh-data
@@ -105,10 +113,10 @@ spec:
       - name: getmesh-config
         configMap:
           name: {{ template "getmesh.fullname" . }}-config
-      {{- if .Values.persistence.enabled }}
+      {{- if and (eq .Values.persistence.nfs.enabled true) (eq .Values.persistence.enabled true) }}
       - name: getmesh-uploads
         persistentVolumeClaim:
-          claimName: {{ template "getmesh.fullname" . }}-uploads
+          claimName: {{ template "getmesh.fullname.no.override" . }}-uploads
       {{- else }}
       - name: getmesh-uploads
         emptyDir: {}
@@ -125,12 +133,11 @@ spec:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: role
-                  operator: In
-                  values:
-                  - replicas
               topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: "{{ template "getmesh.name" . }}"
+                  release: "{{ .Release.Name }}"
+
 
 {{- end}}

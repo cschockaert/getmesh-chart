@@ -10,21 +10,33 @@ metadata:
 data:
 {{ (.Files.Glob "config/security.json").AsConfig | indent 2 }}
 {{ (.Files.Glob "config/automatic-backup.json").AsConfig | indent 2 }}
-{{ (.Files.Glob "config/*.xml").AsConfig | indent 2 }}
+{{ (.Files.Glob "config-odb-3X/*.xml").AsConfig | indent 2 }}
 {{ (.Files.Glob "config/*.js").AsConfig | indent 2 }}
 {{ (.Files.Glob "config/*.yml").AsConfig | indent 2 }}
+{{ (.Files.Glob "config/scripts/*.sh").AsConfig | indent 2 }}
+
   default-distributed-db-config.json: |-
 {{- $file := .Files.Get "config/default-distributed-db-config.json" | indent 6 }}
 {{ tpl $file . }}
 
+  commons-vars.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    export GRAPHDB_FOLDER=${GRAPHDB_FOLDER:-/graphdb}
+    export UPLOADS_FOLDER=${UPLOADS_FOLDER:-/uploads}
+    export BACKUPNFS_FOLDER=${BACKUPNFS_FOLDER:-/backups-nfs}
+
   init-master-node.sh: |-
     #!/bin/sh
     set -euxo pipefail
-    whoami
-    ls -alrth /
-    chown 1000:1000 /uploads
+    source /config/commons-vars.sh
+
+    chown 1000:1000 $UPLOADS_FOLDER
+    chown 1000:1000 $BACKUPNFS_FOLDER && mkdir -p $BACKUPNFS_FOLDER/history && chown -R 1000:1000 $BACKUPNFS_FOLDER/history
+
     echo 'rm distributed-config to force cluster reinitialization (no impact on exiting data)'
-    rm -f /graphdb/storage/distributed-config.json
+    rm -f $GRAPHDB_FOLDER/storage/distributed-config.json
+    #rm -f $GRAPHDB_FOLDER/storage/distributed-sync.json
 
     echo 'init done'
 
@@ -33,31 +45,308 @@ data:
   startup-master-node.sh: |-
     #!/bin/sh
     set -euxo pipefail
-    ls -alrth
+    source /config/commons-vars.sh
+
     export MESH_NODE_NAME=$HOSTNAME
-    exec java -Xmx{{ .Values.java.xmx }} -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=true -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner -initCluster
+
+    # if a backup exist restore it before starting mesh server
+    ORIENTDB_RESTORE_FILE=$BACKUPNFS_FOLDER/orientdb-restore/orientdb-restore.zip
+
+    if [ -f $ORIENTDB_RESTORE_FILE ]; then
+      echo "File $ORIENTDB_RESTORE_FILE exists. Will process restore before starting master node and use a new cluster, replicas should be restarted after that in order to join the new cluster"
+      export MESH_CLUSTER_NAME=$MESH_CLUSTER_NAME-$(date | md5sum | head -c 5)
+      echo "move old storage (/graphdb/storage) to folder $BACKUPNFS_FOLDER/orientdb-restore/old-storage-"$MESH_CLUSTER_NAME
+      mv $GRAPHDB_FOLDER/storage $BACKUPNFS_FOLDER/orientdb-restore/old-$MESH_CLUSTER_NAME
+
+      echo "extract backup to $GRAPHDB_FOLDER/storage then mark it as consumed and rm distributed configs"
+      mkdir -p $GRAPHDB_FOLDER/storage && unzip $ORIENTDB_RESTORE_FILE -d $GRAPHDB_FOLDER/storage/
+      rm -f $GRAPHDB_FOLDER/storage/distributed-*.json
+      mv $ORIENTDB_RESTORE_FILE $ORIENTDB_RESTORE_FILE-$MESH_CLUSTER_NAME.restored
+    fi
+
+    echo "using MESH_CLUSTER_NAME="$MESH_CLUSTER_NAME
+    if [ -f $GRAPHDB_FOLDER/storage/distributed-config.json ]; then
+      echo "starting getmesh (cluster already exist)"
+      exec java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=false -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
+    else
+      echo "running getmesh with init cluster flag"
+      exec java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=false -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner -initCluster
+    fi
+
 
   init-slave-node.sh: |-
     #!/bin/sh
     set -euxo pipefail
-    whoami
-    ls -alrth /
-    chown 1000:1000 /uploads
+    source /config/commons-vars.sh
+
+    chown 1000:1000 $UPLOADS_FOLDER
 
     until nslookup {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
     do echo waiting for hazelcast $(date)
     sleep 2
-    echo 'init done'
     done
+    echo 'init done'
 
   startup-slave-node.sh: |-
     #!/bin/sh
     set -euxo pipefail
-    ls -alrth
-    export MESH_NODE_NAME=$HOSTNAME
-    exec java -Xmx{{ .Values.java.xmx }} -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=true -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
+    source /config/commons-vars.sh
 
+    #case "$HOSTNAME" in
+    #    *replicas*) echo 'rm database as we are a slave node' && rm -rf $GRAPHDB_FOLDER/** ;;
+    #esac
+
+    export MESH_NODE_NAME=$HOSTNAME
+
+    exec java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
+
+  backup.sh: |-
+    #!/bin/sh
+    set -euo pipefail
+    source /config/commons-vars.sh
+
+    # keep alphabetical order with date YYYY-mm-DD-HH-MM-SS
+
+    export CURRENT_DATE=$(date +%Y-%m-%d_%H-%M-%S)
+    export TARGET_BACKUP_DIR=$BACKUPNFS_FOLDER/history/$CURRENT_DATE
+    export LOG_FILE=$TARGET_BACKUP_DIR/job.log
+
+    mkdir -p $TARGET_BACKUP_DIR
+
+    sh /config/backup-script.sh 2>&1 | tee $LOG_FILE
+
+  # new backup script to use when getmesh > 0.29
+  backup-script.sh: |-
+    #!/bin/sh
+    set -euo pipefail
+    source /config/commons-vars.sh
+
+    if [ -z ${TARGET_BACKUP_DIR} ]; then echo "TARGET_BACKUP_DIR not found"; exit 1; fi
+    if [ -z ${CURRENT_DATE} ]; then echo "CURRENT_DATE not found"; exit 1; fi
+
+    mkdir -p $TARGET_BACKUP_DIR
+    echo "CURRENT_DATE="$CURRENT_DATE
+    echo "TARGET_BACKUP_DIR="$TARGET_BACKUP_DIR
+
+    echo "this script start getmesh instance that connect to the cluster and create a binary backup"
+    echo "backups will be stored in folder $BACKUPNFS_FOLDER/history/backup-date/storage_xxx.zip and $BACKUPNFS_FOLDER/history/backup-date/uploads_xxx.tar"
+    echo "date is in GMT format"
+
+    sh /config/backup-orientdb.sh
+    sh /config/backup-uploads.sh
+    sh /config/purge-old-backup.sh
+
+    echo "ls -alrth "$BACKUP_HISTORY_FOLDER
+    ls -alrth $BACKUP_HISTORY_FOLDER
+    echo "ls -alrth "$TARGET_BACKUP_DIR
+    ls -alrth $TARGET_BACKUP_DIR
+
+
+  backup-orientdb.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    if [ -z ${TARGET_BACKUP_DIR} ]; then echo "TARGET_BACKUP_DIR not found"; exit 1; fi
+    if [ -z ${CURRENT_DATE} ]; then echo "CURRENT_DATE not found"; exit 1; fi
+
+    export MESH_NODE_NAME="getmesh-backup-cronjob"
+
+    java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner &
+    MESH_PID=$!
+    echo "tail until server is started (or 3 min timeout)"
+    #timeout 180 grep -q 'startup-complete' <( tail -f /mesh/mesh.log)
+    sleep 180
+    echo "startup-complete detected, killing mesh process"
+    pkill java
+    echo "wait 30s then, invoke backup"
+    sleep 30
+
+    #console.sh "connect plocal:/graphdb/storage admin admin; check database"
+    backup.sh plocal:/graphdb/storage/ admin admin $TARGET_BACKUP_DIR/storage_$CURRENT_DATE.zip default 2>&1
+
+    ls -alrth $TARGET_BACKUP_DIR
+    echo "done"
+
+
+  restore.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    echo "restore procedure will move latest orientdb backup zip file in restore folder of the MASTER node"
+    echo "you can use /config/restore-from-remote.sh to restore remotes backups (with curl)"
+    echo "then you need to restart getmesh master node, he will start under the restored database under a new RANDOM cluster (and will not rejoin replicas instances)"
+    echo "you can test the master node, then if it's ok you have to restart all the instance replicas + the master node, they will recreate the original cluster"
+    echo "after that you need to restore binary uploads (if needed) by running sh /config/restore-uploads.sh"
+
+    if [ -z ${BACKUP_HISTORY_FOLDER} ]; then echo "$BACKUP_HISTORY_FOLDER not found"; exit 1; fi
+
+    #find most recent backup
+    export MOST_RECENT_BACKUP_FOLDER=$BACKUP_HISTORY_FOLDER/$(ls $BACKUP_HISTORY_FOLDER | tail -1)
+    export BINARY_TAR=$(ls -Art $MOST_RECENT_BACKUP_FOLDER/*.tar | tail -n 1)
+    export ORIENTDB_ZIP=$(ls -Art $MOST_RECENT_BACKUP_FOLDER/*.zip | tail -n 1)
+
+    if [ -z ${ORIENTDB_ZIP} ]; then echo "ORIENTDB_ZIP not found"; exit 1; fi
+    if [ -z ${BINARY_TAR} ]; then echo "BINARY_TAR not found"; exit 1; fi
+
+    sh /config/restore-orientdb.sh
+
+    read -p "Press enter to continue, will restore uploads (do it after mesh master restart)"
+    sh /config/restore-uploads.sh
+
+    echo "you perhaps need to reindex elasticsearch after restore is done"
+    echo "you can do it via sh /config/mesh-reindex.sh or mesh-cli"
+
+  restore-from-remote.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    if [ -z ${ORIENTDB_REMOTE_ZIP} ]; then echo "ORIENTDB_REMOTE_ZIP not found"; exit 1; fi
+    if [ -z ${BINARY_REMOTE_TAR} ]; then echo "BINARY_REMOTE_TAR not found"; exit 1; fi
+
+    TEMP=$(mktemp -d)
+    curl -o $TEMP/orientdb-restore.zip $ORIENTDB_REMOTE_ZIP
+    curl -o $TEMP/uploads-restore.zip $BINARY_REMOTE_TAR
+
+    read -p "Press enter to continue, will restore orientdb zip and uploads"
+    export BINARY_TAR=$TEMP/uploads-restore.zip
+    export ORIENTDB_ZIP=$TEMP/orientdb-restore.zip
+
+    sh /config/restore-orientdb.sh
+    sh /config/restore-uploads.sh
+
+  restore-orientdb.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    if [ -z ${ORIENTDB_ZIP} ]; then echo "ORIENTDB_ZIP not found"; exit 1; fi
+
+    echo "will copy orientdb $ORIENTDB_ZIP backup to restore file ($BACKUPNFS_FOLDER/orientdb-restore/orientdb-restore.zip)"
+    read -p "Press enter to continue"
+    mkdir -p $BACKUPNFS_FOLDER/orientdb-restore
+    cp -a $ORIENTDB_ZIP $BACKUPNFS_FOLDER/orientdb-restore/orientdb-restore.zip && ls $BACKUPNFS_FOLDER/orientdb-restore/
+    echo "done"
+
+
+  restore-orientdb-deprecated.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    if [ -z ${ORIENTDB_BACKUP_RESTORE_DIRECTORY} ]; then echo "ORIENTDB_BACKUP_RESTORE_DIRECTORY not found"; exit 1; fi
+    if [ -z ${ORIENTDB_ZIP} ]; then echo "ORIENTDB_ZIP not found"; exit 1; fi
+
+    # rm exiting files ot ensure cp backup is restored
+    rm -rf $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*
+
+    #restore getmesh (getmesh will restore file located in /getmesh-backups/orientdb/)
+    echo 'using GETMESH_HOST='$GETMESH_HOST
+    export GETMESH_TOKEN=$(curl -X POST http://$GETMESH_HOST/api/v1/auth/login -H 'accept: application/json' -H 'content-type: application/json' -d '{"username" : "admin","password" : "admin"} ' | jq .token )
+    echo 'authenticated with GETMESH_TOKEN='$GETMESH_TOKEN
+
+    if [ -z ${GETMESH_TOKEN} ]; then echo "GETMESH_TOKEN not found"; exit 1; fi
+
+    echo 'launching orientdb restore'
+
+    cp -a $ORIENTDB_ZIP $ORIENTDB_BACKUP_RESTORE_DIRECTORY && ls $ORIENTDB_BACKUP_RESTORE_DIRECTORY
+    read -p "Press enter to continue"
+
+    curl -X POST http://$GETMESH_HOST/api/v1/admin/graphdb/restore  -H 'Cookie: mesh.token='$GETMESH_TOKEN -v
+
+
+  restore-uploads.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    if [ -z ${BINARY_TAR} ]; then echo "BINARY_TAR not found"; exit 1; fi
+    if [ -z ${BINARY_TAR} ]; then echo "BINARY_TAR not found"; exit 1; fi
+    if [ -z ${BACKUP_TMP_FOLDER} ]; then echo "BACKUP_TMP_FOLDER not found"; exit 1; fi
+
+    read -p "Press enter to continue, will restore uploads"
+
+    #restore binaries
+    CURRENT_DATE=$(date +%d-%m-%Y_%H-%M-%S)
+    RESTORE_WORKING_FOLDER=$BACKUP_TMP_FOLDER/$CURRENT_DATE
+
+    mkdir -p $RESTORE_WORKING_FOLDER/old-getmesh-uploads/
+    mkdir -p $RESTORE_WORKING_FOLDER/restored-getmesh-uploads/
+
+    tar --same-owner -xvf $BINARY_TAR -C $RESTORE_WORKING_FOLDER/restored-getmesh-uploads/
+    ls -arth $RESTORE_WORKING_FOLDER/restored-getmesh-uploads/
+
+    touch /uploads/restore-upload-$CURRENT_DATE.tmp
+    mv /uploads/* $RESTORE_WORKING_FOLDER/old-getmesh-uploads/
+    ls -arth $RESTORE_WORKING_FOLDER/old-getmesh-uploads/
+
+    mv $RESTORE_WORKING_FOLDER/restored-getmesh-uploads/* /uploads/
+    ls -arth /uploads/
+
+
+  backup-orientdb-deprecated.sh: |-
+    #!/bin/sh
+    set -euo pipefail
+    source /config/commons-vars.sh
+
+    if [ -z ${TARGET_BACKUP_DIR} ]; then echo "TARGET_BACKUP_DIR not found"; exit 1; fi
+
+    echo "invoke getmesh backup then move it to "$TARGET_BACKUP_DIR
+
+    echo 'using GETMESH_HOST='$GETMESH_HOST
+    export GETMESH_TOKEN=$(curl -X POST http://$GETMESH_HOST/api/v1/auth/login -H 'accept: application/json' -H 'content-type: application/json' -d '{"username" : "admin","password" : "admin"} ' | jq .token )
+    echo 'authenticated with GETMESH_TOKEN='$GETMESH_TOKEN
+    echo 'retreive cluster status'
+    curl http://$GETMESH_HOST/api/v1/admin/cluster/status  -H 'Cookie: mesh.token='$GETMESH_TOKEN -v
+
+    # rm existing files ot ensure we get only one backup
+    rm -rf $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*
+
+    echo 'launching orientdb backup'
+    curl -X POST http://$GETMESH_HOST/api/v1/admin/graphdb/backup  -H 'Cookie: mesh.token='$GETMESH_TOKEN -v || true
+
+    echo 'wait that backup file exist (then will sleep at least 60 sec)'
+    while [ -z "$(ls -A $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*.zip)" ]; do echo 'folder is empty.. waiting'; sleep 5; done
+
+    export ORIENTDB_ZIP=$(ls -Art $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*.zip | tail -n 1)
+
+    while true; do
+      if [ $(( $(date +"%s") - $(stat -c%Y $ORIENTDB_ZIP) )) -gt 60 ]; then
+        echo -e  "No activity noted on this window from 60 sec."
+        mv $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*.zip $TARGET_BACKUP_DIR
+        exit 0;
+      fi
+      echo 'Sleep since file is modified: '$ORIENTDB_ZIP
+      echo $(stat -c "%z %N" $ORIENTDB_ZIP)
+      sleep 15
+    done
+
+
+  backup-uploads.sh: |-
+    #!/bin/sh
+    set -euo pipefail
+    source /config/commons-vars.sh
+
+    echo "invoke uploads backup then move it to "$TARGET_BACKUP_DIR
+
+    if [ -z ${TARGET_BACKUP_DIR} ]; then echo "TARGET_BACKUP_DIR not found"; exit 1; fi
+    if [ -z ${CURRENT_DATE} ]; then echo "CURRENT_DATE not found"; exit 1; fi
+    #tar and keep permissions
+    tar -cvpf $TARGET_BACKUP_DIR/uploads_$CURRENT_DATE.tar -C /uploads ./
+
+
+  purge-old-backup.sh: |-
+    #!/bin/sh
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    cd $BACKUPNFS_FOLDER/history
+    echo "purging old backups in "$BACKUP_HISTORY_FOLDER
+    if [ -z ${BACKUP_HISTORY_FOLDER} ]; then echo "$BACKUP_HISTORY_FOLDER not found"; exit 1; fi
+    find $BACKUP_HISTORY_FOLDER -prune -type d -mtime +{{ .Values.persistence.backup.keepDays }} -exec rm -rf {} \;
 
 binaryData:
   keystore.jceks: |-
-{{ .Files.Get "config/keystore.jceks" | b64enc | indent 6 }}
+{{ .Files.Get "secrets/keystore.jceks" | b64enc | indent 6 }}

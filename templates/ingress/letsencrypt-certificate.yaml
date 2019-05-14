@@ -2,7 +2,7 @@
 apiVersion: certmanager.k8s.io/v1alpha1
 kind: Certificate
 metadata:
-  name: {{ template "getmesh.fullname" . }}
+  name: {{ template "getmesh.fullname" . }}-config
   labels:
     app: {{ template "getmesh.name" . }}
     chart: {{ template "getmesh.chart" . }}

@@ -1,6 +1,6 @@
 {
   "autoDeploy": true,
-  "hotAlignment": true,
+  "hotAlignment": false,
   "executionMode": "asynchronous",
   "readQuorum": 1,
   "writeQuorum": 1,
@@ -8,8 +8,9 @@
   "readYourWrites": true,
   "newNodeStrategy": "dynamic",
   "servers": {
-    "{{ template "getmesh.fullname" . }}-master-0@{{ template "getmesh.version.slug" . }}": "MASTER",
-    "*": "REPLICA"
+    "{{ template "getmesh.fullname" . }}-master-0": "master",
+    "{{ template "getmesh.fullname" . }}-master-0@{{ template "getmesh.version.slug" . }}": "master",
+    "*": "replica"
   },
   "clusters": {
     "internal": {

@@ -1,0 +1,67 @@
+{{- if and (eq .Values.persistence.nfs.enabled true) (eq .Values.persistence.enabled true) (eq .Values.persistence.backup.enabled true) }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ include "getmesh.fullname" . }}-backup-cronjob
+  labels:
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    helm.sh/chart: {{ include "getmesh.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  schedule: {{ .Values.persistence.backup.schedule | quote }}
+  concurrencyPolicy: "Forbid"
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      completions: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          containers:
+          - name: {{ .Chart.Name }}-backup
+            image: "cschockaert/mesh-tools:{{ .Values.image.tag }}"
+            imagePullPolicy: Always
+            command: ["/bin/sh", "/config/backup.sh"]
+            env:
+            - name: "GETMESH_HOST"
+              value: {{ template "getmesh.fullname" . }}-master.{{ .Release.Namespace }}.svc.cluster.local:8080
+            - name: "ORIENTDB_BACKUP_RESTORE_DIRECTORY"
+              value: "/backups-nfs/orientdb"
+            - name: "BACKUP_HISTORY_FOLDER"
+              value: "/backups-nfs/history"
+            - name: "BACKUP_TMP_FOLDER"
+              value: "/backups-nfs/tmp"
+            - name: MESH_CLUSTER_NAME
+              value: cluster-{{ template "getmesh.version.slug" . }}
+            - name: MESH_CLUSTER_ENABLED # replica cannot work without cluster
+              value: "true"
+            - name: "hazelcast.kubernetes.service-dns"
+              value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
+            - name: MESH_ELASTICSEARCH_URL
+              value: {{ tpl .Values.elasticsearch.url . | quote }}
+           {{- range $name, $value := .Values.mesh.additionalEnvironmentVariables }}
+            - name: {{ tpl $name $ }}
+              value: {{ tpl $value $ }}
+           {{- end }}
+            volumeMounts:
+            - name: getmesh-config
+              mountPath: "/config"
+            - name: getmesh-uploads
+              mountPath: "/uploads"
+              subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
+            - name: getmesh-uploads
+              mountPath: "/backups-nfs"
+              subPath: {{ template "getmesh.fullname.no.override" . }}-backups
+            resources:
+{{ toYaml .Values.resources | indent 14 }}
+          volumes:
+          - name: getmesh-config
+            configMap:
+              name: {{ template "getmesh.fullname" . }}-config
+          - name: getmesh-uploads
+            persistentVolumeClaim:
+              claimName: {{ template "getmesh.fullname.no.override" . }}-uploads
+          restartPolicy: Never
+
+{{- end }}

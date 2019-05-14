@@ -1,4 +1,4 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "getmesh.fullname" . }}-master
@@ -22,20 +22,22 @@ spec:
         role: master
         app: {{ template "getmesh.name" . }}
     spec:
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 30
       initContainers:
       - name: init
         image: alpine
-        command: ["/bin/sh", "init-master-node.sh"]
+        command: ["/bin/sh", "/config/init-master-node.sh"]
         securityContext:
           runAsUser: 0
         volumeMounts:
-        - name: getmesh-uploads
+        - name: {{ template "getmesh.nfs.name" . }}
           mountPath: "/uploads"
-          subPath: {{ template "getmesh.fullname" . }}-uploads
+          subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
+        - name: {{ template "getmesh.nfs.name" . }}
+          mountPath: "/backups-nfs"
+          subPath: {{ template "getmesh.fullname.no.override" . }}-backups
         - name: getmesh-config
-          mountPath: /init-master-node.sh
-          subPath: init-master-node.sh
+          mountPath: /config
         - name: getmesh-data-master
           mountPath: "/graphdb"
           subPath: "graphdb"
@@ -50,16 +52,22 @@ spec:
          - name: MESH_CLUSTER_ENABLED
            value: {{ .Values.mesh.cluster.enabled | quote }}
          - name: MESH_CLUSTER_NAME
-           value: {{ .Values.mesh.cluster.name | quote }}
+           value: cluster-{{ template "getmesh.version.slug" . }}
          - name: MESH_ELASTICSEARCH_START_EMBEDDED
            value: {{ not .Values.elasticsearch.enabled | quote }}
          - name: MESH_AUTH_KEYSTORE_PATH
            value: "/config/keystore.jceks"
          - name: MESH_BINARY_DIR
            value: "/uploads"
+         - name: MESH_GRAPH_BACKUP_DIRECTORY
+           value: "/backups-nfs/orientdb"
         {{- if .Values.elasticsearch.enabled }}
          - name: MESH_ELASTICSEARCH_URL
            value: {{ tpl .Values.elasticsearch.url . | quote }}
+        {{- end }}
+        {{- range $name, $value := .Values.mesh.additionalEnvironmentVariables }}
+         - name: {{ tpl $name $ }}
+           value: {{ tpl $value $ }}
         {{- end }}
         ports:
           - name: http
@@ -76,10 +84,10 @@ spec:
             protocol: TCP
         livenessProbe:
           httpGet:
-            path: /api/v1/admin/status
+            path: {{ .Values.livenessProbe.httpGet.path | default "/api/v1/" }}
             port: http
-          initialDelaySeconds: 60
-          periodSeconds: 20
+          initialDelaySeconds: 120
+          periodSeconds: 30
           failureThreshold: 10
         #master readinessProbe is associated to hazelcast port vs replica readiness is associated to status
         readinessProbe:
@@ -90,15 +98,15 @@ spec:
             port: http
             {{- end }}
           initialDelaySeconds: 30
-          periodSeconds: 5
+          periodSeconds: 30
           failureThreshold: 10
 
         resources:
 {{ toYaml .Values.resources | indent 12 }}
         volumeMounts:
-          - name: getmesh-uploads
+          - name: {{ template "getmesh.nfs.name" . }}
             mountPath: "/uploads"
-            subPath: {{ template "getmesh.fullname" . }}-uploads
+            subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
           - name: getmesh-config
             mountPath: "/config"
           - name: getmesh-data-master
@@ -107,9 +115,9 @@ spec:
           - name: getmesh-data-master
             mountPath: "/graphdb"
             subPath: "graphdb"
-          - name: getmesh-data-master
-            mountPath: "/backups"
-            subPath: "backup"
+          - name: {{ template "getmesh.nfs.name" . }}
+            mountPath: "/backups-nfs"
+            subPath: {{ template "getmesh.fullname.no.override" . }}-backups
       securityContext:
         runAsUser: 1000
         fsGroup: 1000 #user to run used by getmesh official image, if not setted we got some filesystem errors at startup
@@ -123,20 +131,40 @@ spec:
       - name: getmesh-uploads
         emptyDir: {}
       {{- else }}
+      {{- if and (eq .Values.persistence.nfs.enabled true) (eq .Values.persistence.enabled true) }}
       - name: getmesh-uploads
         persistentVolumeClaim:
-          claimName: {{ template "getmesh.fullname" . }}-uploads
+          claimName: {{ template "getmesh.fullname.no.override" . }}-uploads
+      {{- end}}
       {{- if .Values.persistence.existingClaim }}
       - name: getmesh-data-master
         persistentVolumeClaim:
           claimName: {{ .Values.persistence.data.existingClaim }}
       {{- else }}
+      {{- if .Values.master.tolerations }}
+      tolerations:
+{{ toYaml .Values.master.tolerations | indent 8 }}
+      {{- end }}
+      {{- if .Values.master.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.master.nodeSelector | indent 8 }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: "{{ template "getmesh.name" . }}"
+                    release: "{{ .Release.Name }}"
   volumeClaimTemplates:
     - metadata:
         name: getmesh-data-master
         labels:
           app: {{ template "getmesh.name" . }}
-          chart: {{ template "getmesh.chart" . }}
+          chart: "{{ .Chart.Name }}"
           release: {{ .Release.Name }}
           heritage: {{ .Release.Service }}
       spec:
@@ -156,7 +184,4 @@ spec:
       {{- end }}
     {{- end }}
   {{- end }}
-    {{- if .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml .Values.nodeSelector | indent 8 }}
-    {{- end }}
+

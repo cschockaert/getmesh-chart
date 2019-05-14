@@ -1,16 +1,19 @@
 {{- if and (eq .Values.persistence.nfs.enabled true) (eq .Values.persistence.enabled true) }}
   #NB when mounting this NFS PV, always use a subpath equals to claim name (and containing fullname)
-  # eg subPath: {{ template "getmesh.fullname" . }}-uploads
+  # eg subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: {{ template "getmesh.fullname" . }}-uploads
+  name: {{ template "getmesh.fullname.no.override" . }}-uploads-pv
   labels:
-    app: {{ template "getmesh.fullname" . }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    app: {{ template "getmesh.fullname.no.override" . }}
+    chart: "{{ .Chart.Name }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 spec:
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: {{ template "getmesh.fullname.no.override" . }}-uploads
   capacity:
     storage: {{ .Values.persistence.nfs.storage }}
   accessModes:

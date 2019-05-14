@@ -24,6 +24,17 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 {{- end -}}
 
+
+{{/*
+Create a default fully qualified app name. WITHOUT override
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "getmesh.fullname.no.override" -}}
+{{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
 {{/*
 Create chart name and version as used by the chart label.
 */}}
@@ -40,6 +51,10 @@ Create chart name and version as used by the chart label.
 {{- printf "%s-replicas.%s.%s" .Chart.Name .Release.Name .Values.global.domain | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "getmesh.host-backup-explorer" -}}
+{{- printf "%s-backup-explorer.%s.%s" .Chart.Name .Release.Name .Values.global.domain | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "getmesh.host-internal" -}}
 {{- printf "%s.%s.internal.%s" .Chart.Name .Release.Name .Values.global.domain | trimSuffix "-" -}}
 {{- end -}}
@@ -50,4 +65,14 @@ Create chart name and version as used by the chart label.
 
 {{- define "certificate.fullname" -}}
 {{- printf "%s.%s-tls" .Release.Name .Values.global.domain | trimSuffix "-" -}}
+{{- end -}}
+
+# in this particuliar case (persistance without nfs) we use getmesh-data-master to store uploads
+
+{{- define "getmesh.nfs.name" -}}
+{{- if and (eq .Values.persistence.nfs.enabled false) (eq .Values.persistence.enabled true) -}}
+getmesh-data-master
+{{- else -}}
+getmesh-uploads
+{{- end -}}
 {{- end -}}

@@ -18,3 +18,4 @@ spec:
     release: {{ .Release.Name }}
     #role: master
     app: {{ template "getmesh.name" . }}
+    #statefulset.kubernetes.io/pod-name

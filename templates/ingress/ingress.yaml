@@ -20,21 +20,20 @@ spec:
       - hosts:
         - {{ template "getmesh.host" . }}
         - {{ template "getmesh.host-replicas" . }}
+        - {{ template "getmesh.host-backup-explorer" . }}
         secretName: {{ template "certificate.fullname" . }}
   {{- end }}
   rules:
     - host: {{ template "getmesh.host" . }}
       http:
         paths:
+          #redirect to new ui
           - path: /
+            backend:
+              serviceName: {{ template "getmesh.fullname" . }}-ui
+              servicePort: http
+          - path: /api
             backend:
               serviceName: {{ template "getmesh.fullname" . }}-master
-              servicePort: http
-    - host: {{ template "getmesh.host-replicas" . }}
-      http:
-        paths:
-          - path: /
-            backend:
-              serviceName: {{ template "getmesh.fullname" . }}-replicas
               servicePort: http
 {{- end }}
