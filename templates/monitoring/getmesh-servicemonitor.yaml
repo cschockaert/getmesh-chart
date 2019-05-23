@@ -1,0 +1,26 @@
+{{- if .Values.monitoring }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "getmesh.fullname" . }}-getmesh-servicemonitor
+  labels:
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    helm.sh/chart: {{ include "getmesh.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    prometheus: {{ tpl .Values.prometheusName $ }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "getmesh.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/monitoring: "true"
+  endpoints:
+    - port: monitoring
+      path: /api/v1/metrics
+  targetLabels:
+    - release
+    - role
+
+{{- end}}

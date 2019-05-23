@@ -20,14 +20,14 @@ data:
 {{ tpl $file . }}
 
   commons-vars.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     export GRAPHDB_FOLDER=${GRAPHDB_FOLDER:-/graphdb}
     export UPLOADS_FOLDER=${UPLOADS_FOLDER:-/uploads}
     export BACKUPNFS_FOLDER=${BACKUPNFS_FOLDER:-/backups-nfs}
 
   init-master-node.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -43,7 +43,7 @@ data:
   #quick hack to get meshNode name equals to pod name (and with statefulset we always get pod same names)
   #+ add hazelcast k8s jar in classpath
   startup-master-node.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -75,7 +75,7 @@ data:
 
 
   init-slave-node.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -88,7 +88,7 @@ data:
     echo 'init done'
 
   startup-slave-node.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -101,7 +101,7 @@ data:
     exec java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
 
   backup.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euo pipefail
     source /config/commons-vars.sh
 
@@ -113,11 +113,11 @@ data:
 
     mkdir -p $TARGET_BACKUP_DIR
 
-    sh /config/backup-script.sh 2>&1 | tee $LOG_FILE
+    bash /config/backup-script.sh 2>&1 | tee $LOG_FILE
 
   # new backup script to use when getmesh > 0.29
   backup-script.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euo pipefail
     source /config/commons-vars.sh
 
@@ -132,9 +132,9 @@ data:
     echo "backups will be stored in folder $BACKUPNFS_FOLDER/history/backup-date/storage_xxx.zip and $BACKUPNFS_FOLDER/history/backup-date/uploads_xxx.tar"
     echo "date is in GMT format"
 
-    sh /config/backup-orientdb.sh
-    sh /config/backup-uploads.sh
-    sh /config/purge-old-backup.sh
+    bash /config/backup-orientdb.sh
+    bash /config/backup-uploads.sh
+    bash /config/purge-old-backup.sh
 
     echo "ls -alrth "$BACKUP_HISTORY_FOLDER
     ls -alrth $BACKUP_HISTORY_FOLDER
@@ -143,7 +143,7 @@ data:
 
 
   backup-orientdb.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -151,17 +151,19 @@ data:
     if [ -z ${CURRENT_DATE} ]; then echo "CURRENT_DATE not found"; exit 1; fi
 
     export MESH_NODE_NAME="getmesh-backup-cronjob"
-
-    java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner &
+    echo ${CURRENT_DATE} > /mesh/mesh.log
+    java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner 2>&1 > mesh.log &
     MESH_PID=$!
-    echo "tail until server is started (or 3 min timeout)"
-    #timeout 180 grep -q 'startup-complete' <( tail -f /mesh/mesh.log)
-    sleep 180
+    echo "tail until server is started (or 10 min timeout)"
+    timeout -t 600 grep -q 'startup-complete' <( tail -f /mesh/mesh.log) || true
+    #sleep 600
+
     echo "startup-complete detected, killing mesh process"
     pkill java
     echo "wait 30s then, invoke backup"
     sleep 30
 
+    export ORIENTDB_OPTS_MEMORY="-Xmx768m "
     #console.sh "connect plocal:/graphdb/storage admin admin; check database"
     backup.sh plocal:/graphdb/storage/ admin admin $TARGET_BACKUP_DIR/storage_$CURRENT_DATE.zip default 2>&1
 
@@ -170,7 +172,7 @@ data:
 
 
   restore.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -190,16 +192,16 @@ data:
     if [ -z ${ORIENTDB_ZIP} ]; then echo "ORIENTDB_ZIP not found"; exit 1; fi
     if [ -z ${BINARY_TAR} ]; then echo "BINARY_TAR not found"; exit 1; fi
 
-    sh /config/restore-orientdb.sh
+    bash /config/restore-orientdb.sh
 
     read -p "Press enter to continue, will restore uploads (do it after mesh master restart)"
-    sh /config/restore-uploads.sh
+    bash /config/restore-uploads.sh
 
     echo "you perhaps need to reindex elasticsearch after restore is done"
     echo "you can do it via sh /config/mesh-reindex.sh or mesh-cli"
 
   restore-from-remote.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -214,11 +216,11 @@ data:
     export BINARY_TAR=$TEMP/uploads-restore.zip
     export ORIENTDB_ZIP=$TEMP/orientdb-restore.zip
 
-    sh /config/restore-orientdb.sh
-    sh /config/restore-uploads.sh
+    bash /config/restore-orientdb.sh
+    bash /config/restore-uploads.sh
 
   restore-orientdb.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -232,7 +234,7 @@ data:
 
 
   restore-orientdb-deprecated.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -258,7 +260,7 @@ data:
 
 
   restore-uploads.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
@@ -287,7 +289,7 @@ data:
 
 
   backup-orientdb-deprecated.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euo pipefail
     source /config/commons-vars.sh
 
@@ -325,7 +327,7 @@ data:
 
 
   backup-uploads.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euo pipefail
     source /config/commons-vars.sh
 
@@ -338,7 +340,7 @@ data:
 
 
   purge-old-backup.sh: |-
-    #!/bin/sh
+    #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 

@@ -7,21 +7,25 @@ metadata:
     helm.sh/chart: {{ include "getmesh.chart" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/component: getmesh-ui
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "getmesh.name" . }}-ui
+      app.kubernetes.io/name: {{ include "getmesh.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: getmesh-ui
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "getmesh.name" . }}-ui
+        app.kubernetes.io/name: {{ include "getmesh.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: getmesh-ui
     spec:
       containers:
         - name: ui
-          image: "cschockaert/mesh-ui:0.9.3"
+          image: {{ .Values.getmesh.ui.image | quote }}
           imagePullPolicy: Always
           env:
             - name: "GETMESH_API_HOST"

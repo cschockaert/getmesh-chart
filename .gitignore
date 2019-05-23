@@ -2,3 +2,5 @@ charts/
 config/keystore.jceks
 .idea/
 secrets/
+getmesh-vip/
+values-override*

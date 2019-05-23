@@ -1,0 +1,54 @@
+{{- if .Values.monitoring }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ template "getmesh.fullname" . }}-prometheus-custom-rules
+  labels:
+    app: {{ template "getmesh.name" . }}
+    chart: {{ template "getmesh.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    prometheus: {{ tpl .Values.prometheusName $ }}
+spec:
+  groups:
+  - name: getmesh.master.up.{{ .Release.Name }}
+    rules:
+    - alert: MeshNoMasterUp.{{ .Release.Name }}
+      annotations:
+        description: "Instance getmesh master {{`{{ $labels.release }}`}} down"
+        summary: "{{`{{ $labels.release }}`}} of job {{`{{ $labels.job }}`}} has been down for more than 5 minutes."
+      expr: avg(up{release="{{ .Release.Name }}",role="master"}) by (job) < 0.9
+      for: 5m
+      labels:
+        severity: critical
+  - name: getmesh.replicas.up.{{ .Release.Name }}
+    rules:
+      - alert: MeshLowReplicasUp.{{ .Release.Name }}
+        annotations:
+          description: "Instance getmesh replicas {{`{{ $labels.release }}`}} count is low"
+          summary: "{{`{{ $labels.release }}`}} of job {{`{{ $labels.job }}`}} count is low for more than 5 minutes."
+        expr: avg(up{release="{{ .Release.Name }}",role="replicas"}) by (job) < 0.75
+        for: 5m
+        labels:
+          severity: critical
+  - name: getmesh.high.error.5xx.rate.{{ .Release.Name }}
+    rules:
+    - alert: MeshHighErrorRate5XX.{{ .Release.Name }}
+      annotations:
+        description: "High error rate 5XX detected on mesh instance {{`{{ $labels.release }}`}} {{`{{ $labels.pod }}`}}"
+        summary: "High error rate 5XX detected on mesh instance {{`{{ $labels.release }}`}} of pod {{`{{ $labels.pod }}`}} > 5 for more than 5 minutes."
+      expr: sum(irate(vertx_http_servers_0_0_0_0:8080_responses_5xx_total{release="{{ .Release.Name }}"}[1m])) by (pod) > 5
+      for: 5m
+      labels:
+        severity: critical
+  - name: getmesh.high.error.4xx.rate.{{ .Release.Name }}
+    rules:
+    - alert: MeshHighErrorRate4XX.{{ .Release.Name }}
+      annotations:
+        description: "High error rate 4XX detected on mesh instance {{`{{ $labels.release }}`}} {{`{{ $labels.pod }}`}}"
+        summary: "High error rate 4XX detected on mesh instance {{`{{ $labels.release }}`}} of pod {{`{{ $labels.pod }}`}} > 10 for more than 5 minutes."
+      expr: sum(irate(vertx_http_servers_0_0_0_0:8080_responses_4xx_total{release="{{ .Release.Name }}"}[1m])) by (pod) > 10
+      for: 5m
+      labels:
+        severity: critical
+{{- end}}

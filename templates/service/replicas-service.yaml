@@ -1,22 +1,33 @@
-{{- if .Values.mesh.cluster.enabled }}
+{{- if .Values.getmesh.cluster.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ template "getmesh.fullname" . }}-replicas
   labels:
-    app: {{ template "getmesh.name" . }}
-    chart: {{ template "getmesh.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    helm.sh/chart: {{ include "getmesh.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    role: replicas
+    app.kubernetes.io/monitoring: "true"
 spec:
   type: ClusterIP
   ports:
     - port: 8080
-      targetPort: 8080
+      targetPort: http
+      protocol: TCP
+      name: legacy-httpd
+    - port: 80
+      targetPort: http
       protocol: TCP
       name: http
+    - port: 8081
+      targetPort: 8081
+      protocol: TCP
+      name: monitoring
   selector:
-    app: {{ template "getmesh.name" . }}
-    role: replicas
-    release: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: getmesh-replicas
 {{- end }}

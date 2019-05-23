@@ -3,24 +3,26 @@ kind: StatefulSet
 metadata:
   name: {{ template "getmesh.fullname" . }}-master
   labels:
-    app: {{ template "getmesh.name" . }}
-    chart: {{ template "getmesh.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    helm.sh/chart: {{ include "getmesh.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/component: getmesh-master
 spec:
   replicas: 1 # we use only 1 master and X replicas in this chart
   selector:
     matchLabels:
-      release: {{ .Release.Name }}
-      role: master
-      app: {{ template "getmesh.name" . }}
+      app.kubernetes.io/name: {{ include "getmesh.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   serviceName: "getmesh-master"
   template:
     metadata:
       labels:
-        release: {{ .Release.Name }}
-        role: master
-        app: {{ template "getmesh.name" . }}
+        app.kubernetes.io/name: {{ include "getmesh.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: getmesh-master
+        app.kubernetes.io/part-of: getmesh-api
     spec:
       terminationGracePeriodSeconds: 30
       initContainers:
@@ -50,7 +52,7 @@ spec:
          - name: "hazelcast.kubernetes.service-dns"
            value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
          - name: MESH_CLUSTER_ENABLED
-           value: {{ .Values.mesh.cluster.enabled | quote }}
+           value: {{ .Values.getmesh.cluster.enabled | quote }}
          - name: MESH_CLUSTER_NAME
            value: cluster-{{ template "getmesh.version.slug" . }}
          - name: MESH_ELASTICSEARCH_START_EMBEDDED
@@ -65,13 +67,16 @@ spec:
          - name: MESH_ELASTICSEARCH_URL
            value: {{ tpl .Values.elasticsearch.url . | quote }}
         {{- end }}
-        {{- range $name, $value := .Values.mesh.additionalEnvironmentVariables }}
+        {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
          - name: {{ tpl $name $ }}
            value: {{ tpl $value $ }}
         {{- end }}
         ports:
           - name: http
             containerPort: 8080
+            protocol: TCP
+          - name: monitoring
+            containerPort: 8081
             protocol: TCP
           - name: obinary
             containerPort: 2424
@@ -92,14 +97,14 @@ spec:
         #master readinessProbe is associated to hazelcast port vs replica readiness is associated to status
         readinessProbe:
           tcpSocket:
-            {{- if .Values.mesh.cluster.enabled }}
+            {{- if .Values.getmesh.cluster.enabled }}
             port: hazelcast
             {{- else }}
             port: http
             {{- end }}
           initialDelaySeconds: 30
           periodSeconds: 30
-          failureThreshold: 10
+          failureThreshold: 12
 
         resources:
 {{ toYaml .Values.resources | indent 12 }}
@@ -141,13 +146,13 @@ spec:
         persistentVolumeClaim:
           claimName: {{ .Values.persistence.data.existingClaim }}
       {{- else }}
-      {{- if .Values.master.tolerations }}
+      {{- if .Values.getmesh.master.tolerations }}
       tolerations:
-{{ toYaml .Values.master.tolerations | indent 8 }}
+{{ toYaml .Values.getmesh.master.tolerations | indent 8 }}
       {{- end }}
-      {{- if .Values.master.nodeSelector }}
+      {{- if .Values.getmesh.master.nodeSelector }}
       nodeSelector:
-{{ toYaml .Values.master.nodeSelector | indent 8 }}
+{{ toYaml .Values.getmesh.master.nodeSelector | indent 8 }}
       {{- end }}
       affinity:
         podAntiAffinity:
@@ -157,8 +162,8 @@ spec:
                 topologyKey: kubernetes.io/hostname
                 labelSelector:
                   matchLabels:
-                    app: "{{ template "getmesh.name" . }}"
-                    release: "{{ .Release.Name }}"
+                    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+                    app.kubernetes.io/instance: {{ .Release.Name }}
   volumeClaimTemplates:
     - metadata:
         name: getmesh-data-master

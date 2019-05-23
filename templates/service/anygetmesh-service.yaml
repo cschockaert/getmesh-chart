@@ -3,17 +3,23 @@ kind: Service
 metadata:
   name: {{ template "getmesh.fullname" . }}-anygetmesh
   labels:
-    app: {{ template "getmesh.name" . }}
-    chart: {{ template "getmesh.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    helm.sh/chart: {{ include "getmesh.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
 spec:
   type: ClusterIP
   ports:
     - port: 8080
-      targetPort: 8080
+      targetPort: http
+      protocol: TCP
+      name: legacy-http
+    - port: 80
+      targetPort: http
       protocol: TCP
       name: http
   selector:
-    app: {{ template "getmesh.name" . }}
-    release: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: getmesh-api

@@ -4,18 +4,23 @@ kind: Service
 metadata:
   name: {{ template "getmesh.fullname" . }}-hazelcast
   labels:
-    app: {{ template "getmesh.name" . }}
-    chart: {{ template "getmesh.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    helm.sh/chart: {{ include "getmesh.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
 spec:
   type: ClusterIP
   clusterIP: None
   ports:
   - port: 5701
+    name: hazelcast
     targetPort: hazelcast
   selector:
-    release: {{ .Release.Name }}
-    #role: master
-    app: {{ template "getmesh.name" . }}
-    #statefulset.kubernetes.io/pod-name
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: getmesh-api
+{{/*    release: {{ .Release.Name }}*/}}
+{{/*    #role: master*/}}
+{{/*    app: {{ template "getmesh.name" . }}*/}}
+{{/*    #statefulset.kubernetes.io/pod-name*/}}

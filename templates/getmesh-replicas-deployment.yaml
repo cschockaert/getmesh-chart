@@ -1,27 +1,30 @@
-{{- if .Values.mesh.cluster.enabled }}
+{{- if .Values.getmesh.cluster.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "getmesh.fullname" . }}-replicas
   labels:
-    app: {{ template "getmesh.name" . }}
-    chart: {{ template "getmesh.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+    helm.sh/chart: {{ include "getmesh.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/component: getmesh-replicas
 spec:
-  replicas: {{ .Values.mesh.cluster.replicas }}
+  replicas: {{ .Values.getmesh.cluster.replicas }}
   selector:
     matchLabels:
-      release: {{ .Release.Name }}
-      role: replicas
-      app: {{ template "getmesh.name" . }}
+      app.kubernetes.io/name: {{ include "getmesh.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: getmesh-replicas
   serviceName: "getmesh-replicas"
   template:
     metadata:
       labels:
-        release: {{ .Release.Name }}
-        role: replicas
-        app: {{ template "getmesh.name" . }}
+        app.kubernetes.io/name: {{ include "getmesh.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: getmesh-replicas
+        app.kubernetes.io/part-of: getmesh-api
     spec:
       terminationGracePeriodSeconds: 15
       initContainers:
@@ -64,13 +67,16 @@ spec:
            value: "/uploads"
          - name: MESH_ELASTICSEARCH_URL
            value: {{ tpl .Values.elasticsearch.url . | quote }}
-        {{- range $name, $value := .Values.mesh.additionalEnvironmentVariables }}
+        {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
          - name: {{ tpl $name $ }}
            value: {{ tpl $value $ }}
         {{- end }}
         ports:
           - name: http
             containerPort: 8080
+            protocol: TCP
+          - name: monitoring
+            containerPort: 8081
             protocol: TCP
           - name: obinary
             containerPort: 2424
@@ -136,8 +142,8 @@ spec:
               topologyKey: kubernetes.io/hostname
               labelSelector:
                 matchLabels:
-                  app: "{{ template "getmesh.name" . }}"
-                  release: "{{ .Release.Name }}"
+                  app.kubernetes.io/name: {{ include "getmesh.name" . }}
+                  app.kubernetes.io/instance: {{ .Release.Name }}
 
 
 {{- end}}

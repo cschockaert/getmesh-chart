@@ -17,6 +17,10 @@ httpServer:
   ssl: false
   certPath: "config/cert.pem"
   keyPath: "config/key.pem"
+monitoring:
+  enabled: true
+  port: 8081
+  host: "0.0.0.0"
 cluster: #MESH_CLUSTER_NAME #MESH_CLUSTER_NETWORK_HOST
   enabled: false #MESH_CLUSTER_ENABLED
   vertxPort: 4848 #MESH_CLUSTER_VERTX_PORT=4848 https://github.com/gentics/mesh/issues/519
@@ -39,10 +43,16 @@ search:
     \ -Dlog4j.shutdownHookEnabled=false -Dlog4j2.disable.jmx=true -XX:+HeapDumpOnOutOfMemoryError"
   bulkLimit: 2000
   prefix: "mesh-"
+  eventBufferSize: 1000
+  bulkDebounceTime: 2000
+  idleDebounceTime: 100
+  retryInterval: 5000
+  waitForIdle: true
 upload:
   byteLimit: 262144000
   directory: "/uploads" #MESH_BINARY_DIR
   tempDirectory: "data/tmp/file-uploads"
+  parserLimit: 40000
 security:
   tokenExpirationTime: 3600
   keystorePassword: "MESH_AUTH_KEYSTORE_PASS" #MESH_AUTH_KEYSTORE_PASS
@@ -56,3 +66,5 @@ image:
   imageCacheDirectory: "data/binaryImageCache"
   maxWidth: 2048
   maxHeight: 2048
+  jpegQuality: 0.95
+  resampleFilter: "LANCZOS"

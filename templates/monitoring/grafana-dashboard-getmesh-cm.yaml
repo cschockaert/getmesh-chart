@@ -1,0 +1,14 @@
+{{- if .Values.monitoring }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "getmesh.fullname" . }}-grafana-dashboard
+  labels:
+    app: {{ template "getmesh.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+    prometheus-operator-dashboard: {{ tpl .Values.prometheusName $ }}-dashboard
+data:
+{{ (.Files.Glob "grafana/*.json").AsConfig | indent 2 }}
+{{- end}}

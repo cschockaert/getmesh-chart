@@ -6,29 +6,27 @@ image:
   tag: 0.31.5
   pullPolicy: IfNotPresent
 
-global:
-  domain: mydomain.com
+global: {}
+  #uncomment with the right domain
+  #domain: mydomain.com
 
 
 ingress:
   enabled: true
   tls: true
-  acme: true #if true will generate https certificate via letsencrypt
+  acme: false #if true will generate https certificate via letsencrypt
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 8m
 
+monitoring: false
+
 resources:
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
    limits:
-    cpu: 2000m
-    memory: 4096Mi
+    cpu: 1000m
+    memory: 2048Mi
    requests:
     cpu: 500m
-    memory: 2048Mi
-
+    memory: 1024Mi
 
 persistence:
   backup:
@@ -41,14 +39,6 @@ persistence:
   ## Requires persistence.enabled: true
   ## If defined,  PVC must be created manually before volume will be bound
   # existingClaim:
-
-  ## getmesh master data Persistent Volume Storage Class
-  ## If defined, storageClassName: <storageClass>
-  ## If set to "-", storageClassName: "", which disables dynamic provisioning
-  ## If undefined (the default) or set to null, no storageClassName spec is
-  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
-  ##   GKE, AWS & OpenStack)
-  ##
   storageClass: "ssd"
   accessModes:
   - ReadWriteOnce
@@ -71,9 +61,16 @@ readinessProbe:
 livenessProbe:
   httpGet: {}
 
-mesh:
+prometheusName: prometheus-operator
+
+getmesh:
+  ui:
+    image: registry.auchanlab.com/getmesh/mesh-ui:0.9.4
+  master:
+    tolerations:
   additionalEnvironmentVariables:
-    JAVA_TOOL_OPTIONS: "-Xms1250m -Xmx1250m -XX:MaxDirectMemorySize=512m -Dstorage.diskCache.bufferSize=512"
+    # https://getmesh.io/docs/administration-guide/
+    JAVA_TOOL_OPTIONS: "-Xms512m -Xmx786m -XX:MaxDirectMemorySize=384m -Dstorage.diskCache.bufferSize=384 -Dhazelcast.diagnostics.enabled=true"
   cluster:
     enabled: true #NB: if cluster enabled nfs persistence SHOULD be enabled too
     replicas: 2 #if cluster enabled is false set replicas count to 0
@@ -98,9 +95,6 @@ elasticsearch:
       storageClass: ssd
   cluster: #quick and dirty fix to get cluster name relative to discovery service fullname (differents clusters cant join each others)
     name: c-${DISCOVERY_SERVICE}
-
-java:
-  xmx: 2048m
 
 autoscaling:
   enabled: false

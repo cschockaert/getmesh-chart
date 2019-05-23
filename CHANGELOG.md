@@ -1,8 +1,13 @@
-# 2.0.0 WIP
+# 2.0.0
+* label refactoring install instructions:
 
-upgrading chart to get it work with new getmesh version (with orientdb 3.X)
+k delete statefulsets.apps getmesh-staging-master getmesh-staging-replicas --cascade=false
+k delete deployments getmesh-staging-ui getmesh-staging-restore getmesh-staging-backup-explorer
+k delete cronjobs.batch getmesh-staging-backup-cronjob
 
-
+* add metrics : getmesh and elasticsearch (based on justwatch/elasticsearch_exporter:1.0.2)
+* add 2 grafana dashboard: getmesh and getmesh elasticsearch
+* update to getmesh 0.31.5 (getmesh with orientdb 3.0.18)
 
 # 1.2.0
 * update to getmesh 0.28.3 (latest getmesh with orientdb 2.x)
@@ -21,7 +26,7 @@ upgrading chart to get it work with new getmesh version (with orientdb 3.X)
 # 1.1.0
 * add backup cronjob, (only when nfs is available), backup are stored to nfs volume
 * add restore pod, start it manually with deployment scaling then kubectl exec -ti into pod and invoke /config/restore.sh
-* add backup explorer eg : https://getmesh-backup-explorer.getmesh.mydomain.com/ so we cant remote dl backup easily
+* add backup explorer eg : https://getmesh-backup-explorer.getmesh.gcp.dvl.auchan.net/ so we cant remote dl backup easily
 
 # 1.0.1
 * update getmesh to 0.28.2

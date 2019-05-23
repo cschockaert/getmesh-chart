@@ -19,7 +19,7 @@
 
 		<handler class="com.orientechnologies.orient.server.handler.OAutomaticBackup">
 			<parameters>
-				<parameter name="enabled" value="${ORIENTDB_BACKUP}" />
+				<parameter name="enabled" value="false" />
 				<parameter name="config" value="${ORIENTDB_HOME}/${ORIENTDB_CONFDIR_NAME}/automatic-backup.json" />
 			</parameters>
 		</handler>

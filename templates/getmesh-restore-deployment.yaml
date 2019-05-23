@@ -8,17 +8,21 @@ metadata:
     helm.sh/chart: {{ include "getmesh.chart" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/component: getmesh-restore
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "getmesh.name" . }}-restore
+      app.kubernetes.io/name: {{ include "getmesh.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: getmesh-restore
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "getmesh.name" . }}-restore
+        app.kubernetes.io/name: {{ include "getmesh.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: getmesh-restore
     spec:
       containers:
         - name: restore-job
@@ -44,7 +48,7 @@ spec:
             value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
           - name: MESH_ELASTICSEARCH_URL
             value: {{ tpl .Values.elasticsearch.url . | quote }}
-        {{- range $name, $value := .Values.mesh.additionalEnvironmentVariables }}
+        {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
           - name: {{ tpl $name $ }}
             value: {{ tpl $value $ }}
         {{- end }}
@@ -75,10 +79,16 @@ spec:
       nodeSelector:
 {{ toYaml . | indent 8 }}
     {{- end }}
-    {{- with .Values.affinity }}
       affinity:
-{{ toYaml . | indent 8 }}
-    {{- end }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: {{ include "getmesh.name" . }}
+                    app.kubernetes.io/instance: {{ .Release.Name }}
     {{- with .Values.tolerations }}
       tolerations:
 {{ toYaml . | indent 8 }}
