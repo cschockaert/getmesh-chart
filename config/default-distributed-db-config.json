@@ -1,7 +1,7 @@
 {
   "autoDeploy": true,
-  "hotAlignment": true,
-  "executionMode": "undefined",
+  "hotAlignment": false,
+  "executionMode": "asynchronous",
   "readQuorum": 1,
   "writeQuorum": "majority",
   "failureAvailableNodesLessQuorum": false,
@@ -16,6 +16,7 @@
     "internal": {
     },
     "*": {
+      "owner": "{{ template "getmesh.fullname" . }}-master-0",
       "servers": ["<NEW_NODE>"]
     }
   }

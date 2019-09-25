@@ -25,11 +25,17 @@ spec:
     spec:
       containers:
         - name: ui
-          image: {{ .Values.getmesh.ui.image | quote }}
+          image: "{{ .Values.getmesh.ui.image.repository }}:{{ .Values.getmesh.ui.image.tag }}"
           imagePullPolicy: Always
           env:
             - name: "GETMESH_API_HOST"
               value: {{ template "getmesh.fullname" . }}-master.{{ .Release.Namespace }}.svc.cluster.local:8080
+            - name: "KC_ENABLED"
+              value: {{ .Values.oauth2.enabled | quote }}
+            {{- if .Values.oauth2.enabled }}
+            - name: "KC_REALM_URL"
+              value: {{ .Values.oauth2.authServerUrl }}/realms/internal/
+            {{- end }}
           resources:
             limits:
               cpu: 100m
@@ -37,4 +43,11 @@ spec:
             requests:
               cpu: 25m
               memory: 32Mi
-
+          volumeMounts:
+            - name: mesh-ui-config
+              mountPath: /usr/local/openresty/nginx/html/mesh-ui-config.js
+              subPath: mesh-ui-config.js
+      volumes:
+        - name: mesh-ui-config
+          configMap:
+            name: {{ template "getmesh.fullname" . }}-config

@@ -1,4 +1,4 @@
-{{- if .Values.monitoring }}
+{{- if .Values.monitoring.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -8,7 +8,7 @@ metadata:
     chart: {{ template "getmesh.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
-    prometheus: {{ tpl .Values.prometheusName $ }}
+    prometheus: {{ tpl .Values.monitoring.prometheusName $ }}
 spec:
   groups:
   - name: getmesh.master.up.{{ .Release.Name }}
@@ -17,7 +17,7 @@ spec:
       annotations:
         description: "Instance getmesh master {{`{{ $labels.release }}`}} down"
         summary: "{{`{{ $labels.release }}`}} of job {{`{{ $labels.job }}`}} has been down for more than 5 minutes."
-      expr: avg(up{release="{{ .Release.Name }}",role="master"}) by (job) < 0.9
+      expr: sum(up{release="{{ .Release.Name }}",role="master"}) by (job) < 1
       for: 5m
       labels:
         severity: critical
@@ -27,7 +27,7 @@ spec:
         annotations:
           description: "Instance getmesh replicas {{`{{ $labels.release }}`}} count is low"
           summary: "{{`{{ $labels.release }}`}} of job {{`{{ $labels.job }}`}} count is low for more than 5 minutes."
-        expr: avg(up{release="{{ .Release.Name }}",role="replicas"}) by (job) < 0.75
+        expr: sum(up{release="{{ .Release.Name }}",role="replicas"}) by (job) < 2
         for: 5m
         labels:
           severity: critical

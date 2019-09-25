@@ -10,7 +10,7 @@ metadata:
 data:
 {{ (.Files.Glob "config/security.json").AsConfig | indent 2 }}
 {{ (.Files.Glob "config/automatic-backup.json").AsConfig | indent 2 }}
-{{ (.Files.Glob "config-odb-3X/*.xml").AsConfig | indent 2 }}
+{{ (.Files.Glob "config/*.xml").AsConfig | indent 2 }}
 {{ (.Files.Glob "config/*.js").AsConfig | indent 2 }}
 {{ (.Files.Glob "config/*.yml").AsConfig | indent 2 }}
 {{ (.Files.Glob "config/scripts/*.sh").AsConfig | indent 2 }}
@@ -19,26 +19,25 @@ data:
 {{- $file := .Files.Get "config/default-distributed-db-config.json" | indent 6 }}
 {{ tpl $file . }}
 
-  commons-vars.sh: |-
-    #!/bin/bash
-    set -euxo pipefail
-    export GRAPHDB_FOLDER=${GRAPHDB_FOLDER:-/graphdb}
-    export UPLOADS_FOLDER=${UPLOADS_FOLDER:-/uploads}
-    export BACKUPNFS_FOLDER=${BACKUPNFS_FOLDER:-/backups-nfs}
-
   init-master-node.sh: |-
     #!/bin/bash
     set -euxo pipefail
     source /config/commons-vars.sh
 
-    chown 1000:1000 $UPLOADS_FOLDER
+    chown 1000:1000 $MESH_BINARY_DIR
     chown 1000:1000 $BACKUPNFS_FOLDER && mkdir -p $BACKUPNFS_FOLDER/history && chown -R 1000:1000 $BACKUPNFS_FOLDER/history
 
     echo 'rm distributed-config to force cluster reinitialization (no impact on exiting data)'
-    rm -f $GRAPHDB_FOLDER/storage/distributed-config.json
-    #rm -f $GRAPHDB_FOLDER/storage/distributed-sync.json
+    rm -f $MESH_GRAPH_DB_DIRECTORY/storage/distributed-config.json
+          #rm -f $GRAPHDB_FOLDER/storage/distributed-sync.json
+
+    if [ "$REPAIR_DATABASE_BEFORE_STARTUP" = "true" ]; then
+    bash /config/repair-orientdb.sh
+    chown -R 1000:1000 /graphdb
+    fi
 
     echo 'init done'
+
 
   #quick hack to get meshNode name equals to pod name (and with statefulset we always get pod same names)
   #+ add hazelcast k8s jar in classpath
@@ -53,24 +52,26 @@ data:
     ORIENTDB_RESTORE_FILE=$BACKUPNFS_FOLDER/orientdb-restore/orientdb-restore.zip
 
     if [ -f $ORIENTDB_RESTORE_FILE ]; then
-      echo "File $ORIENTDB_RESTORE_FILE exists. Will process restore before starting master node and use a new cluster, replicas should be restarted after that in order to join the new cluster"
+      echo "File $ORIENTDB_RESTORE_FILE exists. Will process restore before starting master node and start the node in STANDALONE (no cluster), master && replicas should be restarted after that in order to join the new cluster"
       export MESH_CLUSTER_NAME=$MESH_CLUSTER_NAME-$(date | md5sum | head -c 5)
       echo "move old storage (/graphdb/storage) to folder $BACKUPNFS_FOLDER/orientdb-restore/old-storage-"$MESH_CLUSTER_NAME
-      mv $GRAPHDB_FOLDER/storage $BACKUPNFS_FOLDER/orientdb-restore/old-$MESH_CLUSTER_NAME
+      mv $MESH_GRAPH_DB_DIRECTORY/storage $BACKUPNFS_FOLDER/orientdb-restore/old-$MESH_CLUSTER_NAME
 
-      echo "extract backup to $GRAPHDB_FOLDER/storage then mark it as consumed and rm distributed configs"
-      mkdir -p $GRAPHDB_FOLDER/storage && unzip $ORIENTDB_RESTORE_FILE -d $GRAPHDB_FOLDER/storage/
-      rm -f $GRAPHDB_FOLDER/storage/distributed-*.json
+      echo "extract backup to $MESH_GRAPH_DB_DIRECTORY/storage then mark it as consumed and rm distributed configs"
+      mkdir -p $MESH_GRAPH_DB_DIRECTORY/storage && unzip $ORIENTDB_RESTORE_FILE -d $MESH_GRAPH_DB_DIRECTORY/storage/
+      rm -f $MESH_GRAPH_DB_DIRECTORY/storage/distributed-*.json
       mv $ORIENTDB_RESTORE_FILE $ORIENTDB_RESTORE_FILE-$MESH_CLUSTER_NAME.restored
+
+      export MESH_CLUSTER_ENABLED=false
     fi
 
     echo "using MESH_CLUSTER_NAME="$MESH_CLUSTER_NAME
-    if [ -f $GRAPHDB_FOLDER/storage/distributed-config.json ]; then
+    if [ -d $MESH_GRAPH_DB_DIRECTORY/storage/ ]; then
       echo "starting getmesh (cluster already exist)"
-      exec java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=false -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
+      exec java $JAVA_START_OPTIONS -DignoreSnapshotUpgradeCheck=false -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
     else
-      echo "running getmesh with init cluster flag"
-      exec java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -DignoreSnapshotUpgradeCheck=false -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner -initCluster
+      echo "first start detected running getmesh with init cluster flag (-initCluster)"
+      exec java $JAVA_START_OPTIONS -DignoreSnapshotUpgradeCheck=false -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner -initCluster
     fi
 
 
@@ -79,7 +80,7 @@ data:
     set -euxo pipefail
     source /config/commons-vars.sh
 
-    chown 1000:1000 $UPLOADS_FOLDER
+    chown 1000:1000 $MESH_BINARY_DIR
 
     until nslookup {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
     do echo waiting for hazelcast $(date)
@@ -93,12 +94,12 @@ data:
     source /config/commons-vars.sh
 
     #case "$HOSTNAME" in
-    #    *replicas*) echo 'rm database as we are a slave node' && rm -rf $GRAPHDB_FOLDER/** ;;
+    #    *replicas*) echo 'rm database as we are a slave node' && rm -rf $MESH_GRAPH_DB_DIRECTORY/** ;;
     #esac
 
     export MESH_NODE_NAME=$HOSTNAME
 
-    exec java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
+    exec java $JAVA_START_OPTIONS -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner
 
   backup.sh: |-
     #!/bin/bash
@@ -142,6 +143,18 @@ data:
     ls -alrth $TARGET_BACKUP_DIR
 
 
+  repair-orientdb.sh: |-
+    #!/bin/bash
+    set -euxo pipefail
+    source /config/commons-vars.sh
+
+    #console.sh "connect plocal:/graphdb/storage admin admin; rebuild index *"
+    console.sh "connect plocal:/graphdb/storage admin admin; repair database --fix-graph -v"
+    #console.sh "connect plocal:/graphdb/storage admin admin; repair database --fix-links -v"
+    console.sh "connect plocal:/graphdb/storage admin admin; repair database --fix-ridbags -v"
+    console.sh "connect plocal:/graphdb/storage admin admin; repair database --fix-bonsai -v"
+    console.sh "connect plocal:/graphdb/storage admin admin; check database -v"
+
   backup-orientdb.sh: |-
     #!/bin/bash
     set -euxo pipefail
@@ -149,13 +162,14 @@ data:
 
     if [ -z ${TARGET_BACKUP_DIR} ]; then echo "TARGET_BACKUP_DIR not found"; exit 1; fi
     if [ -z ${CURRENT_DATE} ]; then echo "CURRENT_DATE not found"; exit 1; fi
+    #export JAVA_TOOL_OPTIONS="-Xms256m -Xmx768m"
 
     export MESH_NODE_NAME="getmesh-backup-cronjob"
     echo ${CURRENT_DATE} > /mesh/mesh.log
-    java -XshowSettings:vm -showversion -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCCause -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner 2>&1 > mesh.log &
+    java $JAVA_START_OPTIONS -cp /mesh/mesh.jar com.gentics.mesh.server.ServerRunner 2>&1 > mesh.log &
     MESH_PID=$!
     echo "tail until server is started (or 10 min timeout)"
-    timeout -t 600 grep -q 'startup-complete' <( tail -f /mesh/mesh.log) || true
+    timeout 600 grep -q 'startup-complete' <( tail -f /mesh/mesh.log) || true
     #sleep 600
 
     echo "startup-complete detected, killing mesh process"
@@ -164,7 +178,6 @@ data:
     sleep 30
 
     export ORIENTDB_OPTS_MEMORY="-Xmx768m "
-    #console.sh "connect plocal:/graphdb/storage admin admin; check database"
     backup.sh plocal:/graphdb/storage/ admin admin $TARGET_BACKUP_DIR/storage_$CURRENT_DATE.zip default 2>&1
 
     ls -alrth $TARGET_BACKUP_DIR
@@ -232,33 +245,6 @@ data:
     cp -a $ORIENTDB_ZIP $BACKUPNFS_FOLDER/orientdb-restore/orientdb-restore.zip && ls $BACKUPNFS_FOLDER/orientdb-restore/
     echo "done"
 
-
-  restore-orientdb-deprecated.sh: |-
-    #!/bin/bash
-    set -euxo pipefail
-    source /config/commons-vars.sh
-
-    if [ -z ${ORIENTDB_BACKUP_RESTORE_DIRECTORY} ]; then echo "ORIENTDB_BACKUP_RESTORE_DIRECTORY not found"; exit 1; fi
-    if [ -z ${ORIENTDB_ZIP} ]; then echo "ORIENTDB_ZIP not found"; exit 1; fi
-
-    # rm exiting files ot ensure cp backup is restored
-    rm -rf $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*
-
-    #restore getmesh (getmesh will restore file located in /getmesh-backups/orientdb/)
-    echo 'using GETMESH_HOST='$GETMESH_HOST
-    export GETMESH_TOKEN=$(curl -X POST http://$GETMESH_HOST/api/v1/auth/login -H 'accept: application/json' -H 'content-type: application/json' -d '{"username" : "admin","password" : "admin"} ' | jq .token )
-    echo 'authenticated with GETMESH_TOKEN='$GETMESH_TOKEN
-
-    if [ -z ${GETMESH_TOKEN} ]; then echo "GETMESH_TOKEN not found"; exit 1; fi
-
-    echo 'launching orientdb restore'
-
-    cp -a $ORIENTDB_ZIP $ORIENTDB_BACKUP_RESTORE_DIRECTORY && ls $ORIENTDB_BACKUP_RESTORE_DIRECTORY
-    read -p "Press enter to continue"
-
-    curl -X POST http://$GETMESH_HOST/api/v1/admin/graphdb/restore  -H 'Cookie: mesh.token='$GETMESH_TOKEN -v
-
-
   restore-uploads.sh: |-
     #!/bin/bash
     set -euxo pipefail
@@ -288,44 +274,6 @@ data:
     ls -arth /uploads/
 
 
-  backup-orientdb-deprecated.sh: |-
-    #!/bin/bash
-    set -euo pipefail
-    source /config/commons-vars.sh
-
-    if [ -z ${TARGET_BACKUP_DIR} ]; then echo "TARGET_BACKUP_DIR not found"; exit 1; fi
-
-    echo "invoke getmesh backup then move it to "$TARGET_BACKUP_DIR
-
-    echo 'using GETMESH_HOST='$GETMESH_HOST
-    export GETMESH_TOKEN=$(curl -X POST http://$GETMESH_HOST/api/v1/auth/login -H 'accept: application/json' -H 'content-type: application/json' -d '{"username" : "admin","password" : "admin"} ' | jq .token )
-    echo 'authenticated with GETMESH_TOKEN='$GETMESH_TOKEN
-    echo 'retreive cluster status'
-    curl http://$GETMESH_HOST/api/v1/admin/cluster/status  -H 'Cookie: mesh.token='$GETMESH_TOKEN -v
-
-    # rm existing files ot ensure we get only one backup
-    rm -rf $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*
-
-    echo 'launching orientdb backup'
-    curl -X POST http://$GETMESH_HOST/api/v1/admin/graphdb/backup  -H 'Cookie: mesh.token='$GETMESH_TOKEN -v || true
-
-    echo 'wait that backup file exist (then will sleep at least 60 sec)'
-    while [ -z "$(ls -A $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*.zip)" ]; do echo 'folder is empty.. waiting'; sleep 5; done
-
-    export ORIENTDB_ZIP=$(ls -Art $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*.zip | tail -n 1)
-
-    while true; do
-      if [ $(( $(date +"%s") - $(stat -c%Y $ORIENTDB_ZIP) )) -gt 60 ]; then
-        echo -e  "No activity noted on this window from 60 sec."
-        mv $ORIENTDB_BACKUP_RESTORE_DIRECTORY/*.zip $TARGET_BACKUP_DIR
-        exit 0;
-      fi
-      echo 'Sleep since file is modified: '$ORIENTDB_ZIP
-      echo $(stat -c "%z %N" $ORIENTDB_ZIP)
-      sleep 15
-    done
-
-
   backup-uploads.sh: |-
     #!/bin/bash
     set -euo pipefail
@@ -347,7 +295,7 @@ data:
     cd $BACKUPNFS_FOLDER/history
     echo "purging old backups in "$BACKUP_HISTORY_FOLDER
     if [ -z ${BACKUP_HISTORY_FOLDER} ]; then echo "$BACKUP_HISTORY_FOLDER not found"; exit 1; fi
-    find $BACKUP_HISTORY_FOLDER -prune -type d -mtime +{{ .Values.persistence.backup.keepDays }} -exec rm -rf {} \;
+    find $BACKUP_HISTORY_FOLDER -type d -mtime +{{ .Values.persistence.backup.keepDays }} | xargs rm -f -r
 
 binaryData:
   keystore.jceks: |-

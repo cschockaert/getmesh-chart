@@ -1,4 +1,4 @@
-{{- if .Values.monitoring }}
+{{- if .Values.monitoring.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -31,15 +31,15 @@ spec:
         runAsUser: 1000
       containers:
         - name: {{ .Chart.Name }}
-          image: "justwatch/elasticsearch_exporter:1.0.2"
+          image: "justwatch/elasticsearch_exporter:1.1.0"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["elasticsearch_exporter",
-                    "-es.uri=http://{{ .Release.Name }}-elasticsearch-client:9200",
-                    "-es.all=true",
-                    "-es.indices=true",
-                    "-es.timeout=30s",
-                    "-web.listen-address=:9108",
-                    "-web.telemetry-path=/api/v1/metrics"]
+                    "--es.uri=http://{{ .Release.Name }}-elasticsearch-client:9200",
+                    "--es.all",
+                    "--es.indices",
+                    "--es.timeout=30s",
+                    "--web.listen-address=:9108",
+                    "--web.telemetry-path=/api/v1/metrics"]
           securityContext:
             capabilities:
               drop:

@@ -3,8 +3,11 @@
 # Declare variables to be passed into your templates.
 image:
   repository: gentics/mesh
-  tag: 0.31.5
+  tag: 0.40.3
   pullPolicy: IfNotPresent
+
+toolsImage:
+  repository: cschockaert/mesh-tools
 
 global: {}
   #uncomment with the right domain
@@ -16,24 +19,23 @@ ingress:
   tls: true
   acme: false #if true will generate https certificate via letsencrypt
   annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: 8m
+    nginx.ingress.kubernetes.io/proxy-body-size: 8m # allow larger http POST requests
 
-monitoring: false
 
-resources:
+resources: &resources
    limits:
-    cpu: 1000m
+    cpu: 2000m
     memory: 2048Mi
    requests:
     cpu: 500m
     memory: 1024Mi
 
 persistence:
+  enabled: true
   backup:
     enabled: true # if true will create a backup cronjob (only active if nfs is available)
     schedule: "0 3 * * *"
-    keepDays: 60 # purge will remove backup older than this value in days
-  enabled: true
+    keepDays: 120 # purge will remove backup older than this value in days
 
   ## A manually managed Persistent Volume and Claim
   ## Requires persistence.enabled: true
@@ -55,31 +57,72 @@ persistence:
     path: /default #NFS SERVER PATH
     server: X.X.X.X #NFS SERVER IP
 
-readinessProbe:
-  httpGet: {}
-
-livenessProbe:
-  httpGet: {}
-
-prometheusName: prometheus-operator
+monitoring:
+  enabled: false
+  prometheusName: prometheus-operator
 
 getmesh:
   ui:
-    image: registry.auchanlab.com/getmesh/mesh-ui:0.9.4
+    image:
+      repository: cschockaert/mesh-ui
+      tag: mesh-admin-ui-0-9-13
+  replicas:
+    readinessProbe:
+      httpGet: {}
+    livenessProbe:
+      httpGet: {}
+    resources:
+      <<: *resources
+      requests:
+        cpu: 100m
+        memory: 1024Mi
+#    tolerations:
+#    nodeSelector:
   master:
-    tolerations:
+    readinessProbe:
+      httpGet: {}
+    livenessProbe:
+      httpGet: {}
+    resources:
+      <<: *resources
+#    tolerations:
+#    nodeSelector:
+  # dont change theses env variables
+  # https://getmesh.io/docs/administration-guide/
+  coreEnvironmentVariables:
+    hazelcast.kubernetes.service-dns: '{{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local'
+    MESH_CLUSTER_ENABLED:  "{{ .Values.getmesh.cluster.enabled }}"
+    MESH_CLUSTER_NAME: 'cluster-{{ .Chart.Version | replace "." "-" }}-{{ template "getmesh.version.slug" . }}'
+    MESH_UPDATECHECK: "false"
+    MESH_ELASTICSEARCH_START_EMBEDDED: "false"
+    MESH_ELASTICSEARCH_URL: "{{ tpl .Values.elasticsearch.url . }}"
+    MESH_MONITORING_HTTP_HOST: "0.0.0.0"
+    MESH_CLUSTER_NETWORK_HOST: "0.0.0.0"
+    MESH_CLUSTER_VERTX_PORT: "4848"
+    MESH_GRAPH_BACKUP_DIRECTORY: "/backups-nfs/orientdb"
+    MESH_AUTH_KEYSTORE_PATH: "/config/keystore.jceks"
+    MESH_GRAPH_DB_DIRECTORY: "/graphdb"
+    MESH_BINARY_DIR: "/uploads"
+    MESH_CONTENT_AUTO_PURGE: "true"
+    JAVA_START_OPTIONS: "-XshowSettings:vm -showversion -Xlog:gc"
   additionalEnvironmentVariables:
-    # https://getmesh.io/docs/administration-guide/
-    JAVA_TOOL_OPTIONS: "-Xms512m -Xmx786m -XX:MaxDirectMemorySize=384m -Dstorage.diskCache.bufferSize=384 -Dhazelcast.diagnostics.enabled=true"
+    JAVA_TOOL_OPTIONS: "-XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=50 -XX:MaxDirectMemorySize=384m -Dstorage.diskCache.bufferSize=384 -Dhazelcast.diagnostics.enabled=true"
   cluster:
-    enabled: true #NB: if cluster enabled nfs persistence SHOULD be enabled too
+    enabled: true
+    # IMPORTANT Notes :
+    #
+    # When installing a new getmesh release, or when starting a new from a backup it should be started first with cluster.enabled = false
+    # then you can run this scripts : bash /config/mesh-search-clear, mesh-search-sync, mesh-consistency-repair
+    # after that, reinstall this release with cluster enabled TRUE
+    #
+    # Note 2: if cluster enabled nfs persistence SHOULD be enabled too
     replicas: 2 #if cluster enabled is false set replicas count to 0
 
 elasticsearch:
   enabled: true #if not enabled, es will be started in getmesh container, else es will be started outside using official elasticsearch chart
-  # getmesh use elasticsearch-oss 6.1.4
+  # getmesh use elasticsearch-oss 6.8.0
   image:
-    tag: 6.1.4
+    tag: 6.8.2
   url: http://{{ .Release.Name }}-elasticsearch-client:9200
   data:
     antiAffinity: "hard"
@@ -101,3 +144,7 @@ autoscaling:
   maxReplicas: 5
   minReplicas: 2
   targetCPUUtilizationPercentage: 80 # percent against request cpu
+
+oauth2:
+  enabled: false
+  authServerUrl: "https://oidc:443/auth" # default client id is 'getmesh'

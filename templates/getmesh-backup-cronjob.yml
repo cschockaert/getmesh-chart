@@ -31,7 +31,7 @@ spec:
         spec:
           containers:
           - name: {{ .Chart.Name }}-backup
-            image: "cschockaert/mesh-tools:{{ .Values.image.tag }}"
+            image: "{{ .Values.toolsImage.repository }}:{{ .Values.image.tag }}"
             imagePullPolicy: Always
             command: ["/bin/bash", "/config/backup.sh"]
             env:
@@ -43,17 +43,13 @@ spec:
               value: "/backups-nfs/history"
             - name: "BACKUP_TMP_FOLDER"
               value: "/backups-nfs/tmp"
-            - name: MESH_CLUSTER_NAME
-              value: cluster-{{ template "getmesh.version.slug" . }}
-            - name: MESH_CLUSTER_ENABLED # replica cannot work without cluster
-              value: "true"
-            - name: "hazelcast.kubernetes.service-dns"
-              value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
-            - name: MESH_ELASTICSEARCH_URL
-              value: {{ tpl .Values.elasticsearch.url . | quote }}
+           {{- range $name, $value := .Values.getmesh.coreEnvironmentVariables }}
+            - name: {{ tpl $name $ }}
+              value: {{ tpl $value $ | quote }}
+           {{- end }}
            {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
             - name: {{ tpl $name $ }}
-              value: {{ tpl $value $ }}
+              value: {{ tpl $value $ | quote }}
            {{- end }}
             volumeMounts:
             - name: getmesh-config
@@ -65,7 +61,7 @@ spec:
               mountPath: "/backups-nfs"
               subPath: {{ template "getmesh.fullname.no.override" . }}-backups
             resources:
-{{ toYaml .Values.resources | indent 14 }}
+{{ toYaml .Values.getmesh.master.resources | indent 14 }}
           volumes:
           - name: getmesh-config
             configMap:

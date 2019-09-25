@@ -1,4 +1,4 @@
-{{- if .Values.monitoring }}
+{{- if .Values.monitoring.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/version: {{ .Chart.AppVersion }}
-    prometheus: {{ tpl .Values.prometheusName $ }}
+    prometheus: {{ tpl .Values.monitoring.prometheusName $ }}
 spec:
   selector:
     matchLabels:

@@ -1,40 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
-	<conversionRule conversionWord="meshName" converterClass="com.gentics.mesh.log.MeshLogNameConverter"/>
-	<statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+    <conversionRule conversionWord="meshName" converterClass="com.gentics.mesh.log.MeshLogNameConverter"/>
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
 
-	<appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
-		<target>System.err</target>
-		<encoder>
-			<pattern>%d{HH:mm:ss.SSS} [%meshName] %-5level [%thread] - %msg%n</pattern>
-		</encoder>
-		<filter class="ch.qos.logback.classic.filter.LevelFilter">
-			<level>ERROR</level>
-			<onMatch>ACCEPT</onMatch>
-			<onMismatch>DENY</onMismatch>
-		</filter>
-	</appender>
+    <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%meshName] %-5level [%thread] - %msg%n</pattern>
+        </encoder>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+    </appender>
 
-	<appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-		<encoder>
-			<pattern>%d{HH:mm:ss.SSS} [%meshName] %-5level [%thread] - %msg%n</pattern>
-		</encoder>
-	</appender>
-
-
-	<!-- https://github.com/hazelcast/hazelcast/issues/12687-->
-	<!--<logger name="com.hazelcast.nio.tcp.SocketAcceptorThread" level="WARN" />-->
-	<!--<logger name="com.hazelcast.nio.tcp.TcpIpConnectionManager" level="WARN" />-->
-	<!--<logger name="com.hazelcast.nio.tcp.TcpIpConnection" level="WARN" />-->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%meshName] %-5level [%thread] - %msg%n</pattern>
+        </encoder>
+    </appender>
 
 
-	<logger name="org.elasticsearch.node" level="INFO" />
-	<logger name="io.vertx" level="INFO"/>
-	<logger name="com.gentics" level="INFO"/>
-	<logger name="org.elasticsearch" level="ERROR"/>
-	<logger name="ch.qos" level="ERROR"/>
-	<root level="ERROR">
-		<appender-ref ref="STDOUT"/>
-	</root>
+    <!-- https://github.com/hazelcast/hazelcast/issues/12687-->
+    <!--<logger name="com.hazelcast.nio.tcp.SocketAcceptorThread" level="WARN" />-->
+    <!--<logger name="com.hazelcast.nio.tcp.TcpIpConnectionManager" level="WARN" />-->
+    <!--<logger name="com.hazelcast.nio.tcp.TcpIpConnection" level="WARN" />-->
+    <logger name="com.gentics.mesh.auth.provider.MeshJWTAuthProvider" level="ERROR"/>
+
+    <logger name="org.elasticsearch.node" level="INFO" />
+    <logger name="io.vertx" level="INFO"/>
+    <logger name="com.gentics" level="INFO"/>
+    <logger name="org.elasticsearch" level="ERROR"/>
+    <logger name="ch.qos" level="ERROR"/>
+    <root level="ERROR">
+        <appender-ref ref="STDOUT"/>
+    </root>
 </configuration>

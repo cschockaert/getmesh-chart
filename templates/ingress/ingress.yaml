@@ -11,6 +11,11 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: {{ .Values.global.ingressClass | default "nginx" }}
     kubernetes.io/tls-acme: "false"
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location ~ ^/$ {
+          return 301 $pass_access_scheme://{{ printf "%s-ui.%s.%s" .Chart.Name .Release.Name .Values.global.domain | trimSuffix "-" }};
+      }
+
 {{- with .Values.ingress.annotations }}
 {{ toYaml . | indent 4 }}
 {{- end }}

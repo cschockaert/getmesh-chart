@@ -26,9 +26,8 @@ spec:
     spec:
       containers:
         - name: restore-job
-          image: "cschockaert/mesh-tools:{{ .Values.image.tag }}"
-          imagePullPolicy: Always
-          {{/*command: ["/bin/sh", "/config/backup.sh"]*/}}
+          image: "{{ .Values.toolsImage.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh"]
           args: ["-c", "while true; do echo 'invoke manually /config/restore.sh inside this pod to restore getmesh to latest available backup'; sleep 30;done"]
           env:
@@ -40,17 +39,13 @@ spec:
             value: "/backups-nfs/history"
           - name: "BACKUP_TMP_FOLDER"
             value: "/backups-nfs/tmp"
-          - name: MESH_CLUSTER_NAME
-            value: cluster-{{ template "getmesh.version.slug" . }}
-          - name: MESH_CLUSTER_ENABLED # replica cannot work without cluster
-            value: "true"
-          - name: "hazelcast.kubernetes.service-dns"
-            value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
-          - name: MESH_ELASTICSEARCH_URL
-            value: {{ tpl .Values.elasticsearch.url . | quote }}
+        {{- range $name, $value := .Values.getmesh.coreEnvironmentVariables }}
+          - name: {{ tpl $name $ }}
+            value: {{ tpl $value $ | quote }}
+        {{- end }}
         {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
           - name: {{ tpl $name $ }}
-            value: {{ tpl $value $ }}
+            value: {{ tpl $value $ | quote }}
         {{- end }}
           volumeMounts:
           - name: getmesh-config
@@ -63,11 +58,11 @@ spec:
             subPath: {{ template "getmesh.fullname.no.override" . }}-backups
           resources:
             limits:
-              cpu: 500m
-              memory: 1024Mi
+              cpu: 1000m
+              memory: 2048Mi
             requests:
-              cpu: 50m
-              memory: 128Mi
+              cpu: 100m
+              memory: 256Mi
       volumes:
       - name: getmesh-config
         configMap:
@@ -75,10 +70,6 @@ spec:
       - name: getmesh-uploads
         persistentVolumeClaim:
           claimName: {{ template "getmesh.fullname.no.override" . }}-uploads
-    {{- with .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml . | indent 8 }}
-    {{- end }}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -89,8 +80,4 @@ spec:
                   matchLabels:
                     app.kubernetes.io/name: {{ include "getmesh.name" . }}
                     app.kubernetes.io/instance: {{ .Release.Name }}
-    {{- with .Values.tolerations }}
-      tolerations:
-{{ toYaml . | indent 8 }}
-    {{- end }}
 {{- end }}

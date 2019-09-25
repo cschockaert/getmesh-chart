@@ -58,10 +58,6 @@ spec:
       - name: getmesh-uploads
         persistentVolumeClaim:
           claimName: {{ template "getmesh.fullname.no.override" . }}-uploads
-    {{- with .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml . | indent 8 }}
-    {{- end }}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

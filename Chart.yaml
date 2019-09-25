@@ -1,7 +1,7 @@
-appVersion: 0.31.5
+appVersion: 0.40.3
 description: Opensource headless content management system (https://getmesh.io)
 name: getmesh
 maintainers:
 - email: cschockaert@auchan.fr
   name: Clement Schockaert
-version: 2.0.0
+version: 2.2.1

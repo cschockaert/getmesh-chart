@@ -1,13 +1,24 @@
+# 2.2.1
+* update getmesh to 0.40.3
+
+# 2.2.0
+* update getmesh to 0.40.2
+* update elasticsearch to 6.8.2
+
+# 2.1.0
+* add keycloack
+* update ui : better textarea scroll and filter option in create node
+
 # 2.0.0
 * label refactoring install instructions:
 
-k delete statefulsets.apps getmesh-staging-master getmesh-staging-replicas --cascade=false
-k delete deployments getmesh-staging-ui getmesh-staging-restore getmesh-staging-backup-explorer
-k delete cronjobs.batch getmesh-staging-backup-cronjob
+k delete statefulsets.apps RELEASE-NAME-master RELEASE-NAME-replicas --cascade=false
+k delete deployments RELEASE-NAME-ui RELEASE-NAME-restore RELEASE-NAME-backup-explorer
+k delete cronjobs.batch RELEASE-NAME-backup-cronjob
 
 * add metrics : getmesh and elasticsearch (based on justwatch/elasticsearch_exporter:1.0.2)
 * add 2 grafana dashboard: getmesh and getmesh elasticsearch
-* update to getmesh 0.31.5 (getmesh with orientdb 3.0.18)
+* update to getmesh 0.33.1 (getmesh with orientdb 3.0.19)
 
 # 1.2.0
 * update to getmesh 0.28.3 (latest getmesh with orientdb 2.x)

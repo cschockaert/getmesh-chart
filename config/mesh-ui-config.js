@@ -6,12 +6,15 @@
      */
     var meshUiConfig = {
         // The URL to the Mesh API
-        apiUrl: '/api/v1/',
+        apiUrl: '/api/v2/',
 
         // The ISO-639-1 code of the default language
         defaultLanguage: 'en',
         // The ISO-639-1 codes of the available languages
         availableLanguages: ['en', 'fr'],
+
+	    // wait timeout before retrying search request without wait mode
+	    searchNodesWaitTimeout: 2500,
 
         // Provide an array or URLs for previewing nodes, in the following format:
         //

@@ -1,4 +1,3 @@
-{{- if .Values.getmesh.cluster.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -11,7 +10,11 @@ metadata:
     app.kubernetes.io/version: {{ .Chart.AppVersion }}
     app.kubernetes.io/component: getmesh-replicas
 spec:
+  {{- if .Values.getmesh.cluster.enabled }}
   replicas: {{ .Values.getmesh.cluster.replicas }}
+  {{- else}}
+  replicas: 0
+  {{- end}}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "getmesh.name" . }}
@@ -53,23 +56,19 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ["/bin/sh", "/config/startup-slave-node.sh"]
         env:
-         - name: "hazelcast.kubernetes.service-dns"
-           value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
-         - name: MESH_CLUSTER_ENABLED # replica cannot work without cluster
-           value: "true"
-         - name: MESH_CLUSTER_NAME
-           value: cluster-{{ template "getmesh.version.slug" . }}
-         - name: MESH_ELASTICSEARCH_START_EMBEDDED # replica cannot work without external elasticsearch
-           value: "false"
-         - name: MESH_AUTH_KEYSTORE_PATH
-           value: "/config/keystore.jceks"
-         - name: MESH_BINARY_DIR
-           value: "/uploads"
-         - name: MESH_ELASTICSEARCH_URL
-           value: {{ tpl .Values.elasticsearch.url . | quote }}
+        {{- range $name, $value := .Values.getmesh.coreEnvironmentVariables }}
+         - name: {{ tpl $name $ }}
+           value: {{ tpl $value $ | quote }}
+        {{- end }}
         {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
          - name: {{ tpl $name $ }}
-           value: {{ tpl $value $ }}
+           value: {{ tpl $value $ | quote }}
+        {{- end }}
+        {{- if .Values.oauth2.enabled }}
+         - name: MESH_AUTH_OAUTH2_ENABLED
+           value: "true"
+         - name: MESH_AUTH_OAUTH2_SERVER_CONF_AUTH_SERVER_URL
+           value: {{ tpl .Values.oauth2.authServerUrl . | quote }}
         {{- end }}
         ports:
           - name: http
@@ -89,20 +88,20 @@ spec:
             protocol: TCP
         livenessProbe:
           httpGet:
-            path: {{ .Values.livenessProbe.httpGet.path | default "/api/v1/" }}
+            path: {{ .Values.getmesh.replicas.livenessProbe.httpGet.path | default "/api/v1/" }}
             port: http
-          initialDelaySeconds: 60
-          periodSeconds: 15
-          failureThreshold: 4
+          initialDelaySeconds: {{ .Values.getmesh.replicas.livenessProbe.initialDelaySeconds | default 60 }}
+          periodSeconds: {{ .Values.getmesh.replicas.livenessProbe.periodSeconds | default 20 }}
+          failureThreshold: {{ .Values.getmesh.replicas.livenessProbe.failureThreshold | default 6 }}
         readinessProbe:
           httpGet:
-            path: {{ .Values.readinessProbe.httpGet.path | default "/api/v1/admin/status" }}
+            path: {{ .Values.getmesh.replicas.readinessProbe.httpGet.path | default "/api/v1/admin/status" }}
             port: http
-          initialDelaySeconds: 45
-          periodSeconds: 15
-          failureThreshold: 5
+          initialDelaySeconds:  {{ .Values.getmesh.replicas.readinessProbe.initialDelaySeconds | default 45 }}
+          periodSeconds:  {{ .Values.getmesh.replicas.readinessProbe.initialDelaySeconds | default 20 }}
+          failureThreshold:  {{ .Values.getmesh.replicas.readinessProbe.initialDelaySeconds | default 6 }}
         resources:
-{{ toYaml .Values.resources | indent 12 }}
+{{ toYaml .Values.getmesh.replicas.resources | indent 12 }}
         volumeMounts:
           - name: getmesh-uploads
             mountPath: "/uploads"
@@ -129,11 +128,14 @@ spec:
       {{- end }}
       - name: getmesh-data
         emptyDir: {}
-
-    {{- if .Values.nodeSelector }}
+      {{- if .Values.getmesh.replicas.tolerations }}
+      tolerations:
+      {{ toYaml .Values.getmesh.replicas.tolerations | indent 8 }}
+      {{- end }}
+      {{- if .Values.getmesh.replicas.nodeSelector }}
       nodeSelector:
-{{ toYaml .Values.nodeSelector | indent 8 }}
-    {{- end }}
+      {{ toYaml .Values.getmesh.replicas.nodeSelector | indent 8 }}
+      {{- end }}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -144,6 +146,3 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: {{ include "getmesh.name" . }}
                   app.kubernetes.io/instance: {{ .Release.Name }}
-
-
-{{- end}}

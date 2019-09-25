@@ -1,4 +1,4 @@
-{{- if .Values.monitoring }}
+{{- if .Values.monitoring.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -8,7 +8,7 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-    prometheus-operator-dashboard: {{ tpl .Values.prometheusName $ }}-dashboard
+    prometheus-operator-dashboard: {{ tpl .Values.monitoring.prometheusName $ }}-dashboard
 data:
 {{ (.Files.Glob "grafana/*.json").AsConfig | indent 2 }}
 {{- end}}

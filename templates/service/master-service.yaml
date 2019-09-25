@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/version: {{ .Chart.AppVersion }}
     role: master
+    release: {{ .Release.Name }}
     app.kubernetes.io/monitoring: "true"
 spec:
   type: ClusterIP

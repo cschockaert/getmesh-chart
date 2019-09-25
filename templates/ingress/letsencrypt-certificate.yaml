@@ -9,12 +9,6 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 spec:
-  acme:
-    config:
-    - dns01:
-        provider: gcp-dns
-      domains:
-      - '*.{{ .Release.Name }}.{{ .Values.global.domain }}'
   dnsNames:
   - '*.{{ .Release.Name }}.{{ .Values.global.domain }}'
   issuerRef:

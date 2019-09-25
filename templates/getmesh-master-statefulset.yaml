@@ -27,7 +27,7 @@ spec:
       terminationGracePeriodSeconds: 30
       initContainers:
       - name: init
-        image: alpine
+        image: "{{ .Values.toolsImage.repository }}:{{ .Values.image.tag }}"
         command: ["/bin/sh", "/config/init-master-node.sh"]
         securityContext:
           runAsUser: 0
@@ -43,33 +43,28 @@ spec:
         - name: getmesh-data-master
           mountPath: "/graphdb"
           subPath: "graphdb"
+        env:
+        - name: "REPAIR_DATABASE_BEFORE_STARTUP"
+          value: "false"
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command: ["/bin/sh", "/config/startup-master-node.sh"]
         env:
-         - name: "hazelcast.kubernetes.service-dns"
-           value: {{ template "getmesh.fullname" . }}-hazelcast.{{ .Release.Namespace }}.svc.cluster.local
-         - name: MESH_CLUSTER_ENABLED
-           value: {{ .Values.getmesh.cluster.enabled | quote }}
-         - name: MESH_CLUSTER_NAME
-           value: cluster-{{ template "getmesh.version.slug" . }}
-         - name: MESH_ELASTICSEARCH_START_EMBEDDED
-           value: {{ not .Values.elasticsearch.enabled | quote }}
-         - name: MESH_AUTH_KEYSTORE_PATH
-           value: "/config/keystore.jceks"
-         - name: MESH_BINARY_DIR
-           value: "/uploads"
-         - name: MESH_GRAPH_BACKUP_DIRECTORY
-           value: "/backups-nfs/orientdb"
-        {{- if .Values.elasticsearch.enabled }}
-         - name: MESH_ELASTICSEARCH_URL
-           value: {{ tpl .Values.elasticsearch.url . | quote }}
+        {{- range $name, $value := .Values.getmesh.coreEnvironmentVariables }}
+         - name: {{ tpl $name $ }}
+           value: {{ tpl $value $ | quote }}
         {{- end }}
         {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
          - name: {{ tpl $name $ }}
-           value: {{ tpl $value $ }}
+           value: {{ tpl $value $ | quote }}
+        {{- end }}
+        {{- if .Values.oauth2.enabled }}
+         - name: MESH_AUTH_OAUTH2_ENABLED
+           value: "true"
+         - name: MESH_AUTH_OAUTH2_SERVER_CONF_AUTH_SERVER_URL
+           value: {{ tpl .Values.oauth2.authServerUrl . | quote }}
         {{- end }}
         ports:
           - name: http
@@ -89,11 +84,11 @@ spec:
             protocol: TCP
         livenessProbe:
           httpGet:
-            path: {{ .Values.livenessProbe.httpGet.path | default "/api/v1/" }}
+            path: {{ .Values.getmesh.master.livenessProbe.httpGet.path | default "/api/v1/" }}
             port: http
-          initialDelaySeconds: 120
-          periodSeconds: 30
-          failureThreshold: 10
+          initialDelaySeconds: {{ .Values.getmesh.master.livenessProbe.initialDelaySeconds | default 30 }}
+          periodSeconds: {{ .Values.getmesh.master.livenessProbe.periodSeconds | default 10 }}
+          failureThreshold: {{ .Values.getmesh.master.livenessProbe.failureThreshold | default 60 }}
         #master readinessProbe is associated to hazelcast port vs replica readiness is associated to status
         readinessProbe:
           tcpSocket:
@@ -102,12 +97,12 @@ spec:
             {{- else }}
             port: http
             {{- end }}
-          initialDelaySeconds: 30
-          periodSeconds: 30
-          failureThreshold: 12
+          initialDelaySeconds: {{ .Values.getmesh.master.readinessProbe.initialDelaySeconds | default 30 }}
+          periodSeconds: {{ .Values.getmesh.master.readinessProbe.periodSeconds | default 10 }}
+          failureThreshold: {{ .Values.getmesh.master.readinessProbe.failureThreshold | default 60 }}
 
         resources:
-{{ toYaml .Values.resources | indent 12 }}
+{{ toYaml .Values.getmesh.master.resources | indent 12 }}
         volumeMounts:
           - name: {{ template "getmesh.nfs.name" . }}
             mountPath: "/uploads"
