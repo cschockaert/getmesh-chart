@@ -11,11 +11,12 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: {{ .Values.global.ingressClass | default "nginx" }}
     kubernetes.io/tls-acme: "false"
+{{- if .Values.getmesh.ui.enabled }}
     nginx.ingress.kubernetes.io/server-snippet: |
       location ~ ^/$ {
           return 301 $pass_access_scheme://{{ printf "%s-ui.%s.%s" .Chart.Name .Release.Name .Values.global.domain | trimSuffix "-" }};
       }
-
+{{- end }}
 {{- with .Values.ingress.annotations }}
 {{ toYaml . | indent 4 }}
 {{- end }}
@@ -24,20 +25,13 @@ spec:
   tls:
       - hosts:
         - {{ template "getmesh.host" . }}
-        - {{ template "getmesh.host-replicas" . }}
-        - {{ template "getmesh.host-backup-explorer" . }}
         secretName: {{ template "certificate.fullname" . }}
   {{- end }}
   rules:
     - host: {{ template "getmesh.host" . }}
       http:
         paths:
-          #redirect to new ui
           - path: /
-            backend:
-              serviceName: {{ template "getmesh.fullname" . }}-ui
-              servicePort: http
-          - path: /api
             backend:
               serviceName: {{ template "getmesh.fullname" . }}-master
               servicePort: http

@@ -1,3 +1,4 @@
+{{- if .Values.getmesh.ui.enabled -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,3 +52,4 @@ spec:
         - name: mesh-ui-config
           configMap:
             name: {{ template "getmesh.fullname" . }}-config
+{{- end }}

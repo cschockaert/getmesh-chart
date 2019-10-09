@@ -3,11 +3,11 @@
 # Declare variables to be passed into your templates.
 image:
   repository: gentics/mesh
-  tag: 0.40.3
+  tag: 1.0.1
   pullPolicy: IfNotPresent
 
 toolsImage:
-  repository: cschockaert/mesh-tools
+  repository: cschockaert/getmesh-tools # image used to make backup / restore
 
 global: {}
   #uncomment with the right domain
@@ -63,9 +63,10 @@ monitoring:
 
 getmesh:
   ui:
-    image:
-      repository: cschockaert/mesh-ui
-      tag: mesh-admin-ui-0-9-13
+    enabled: false # if true will forward to a dedicated standalone ui
+#    image:
+#      repository: cschockaert/mesh-ui
+#      tag: mesh-admin-ui-0-9-13
   replicas:
     readinessProbe:
       httpGet: {}
@@ -94,7 +95,6 @@ getmesh:
     MESH_CLUSTER_ENABLED:  "{{ .Values.getmesh.cluster.enabled }}"
     MESH_CLUSTER_NAME: 'cluster-{{ .Chart.Version | replace "." "-" }}-{{ template "getmesh.version.slug" . }}'
     MESH_UPDATECHECK: "false"
-    MESH_ELASTICSEARCH_START_EMBEDDED: "false"
     MESH_ELASTICSEARCH_URL: "{{ tpl .Values.elasticsearch.url . }}"
     MESH_MONITORING_HTTP_HOST: "0.0.0.0"
     MESH_CLUSTER_NETWORK_HOST: "0.0.0.0"

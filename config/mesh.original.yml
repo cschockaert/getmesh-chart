@@ -1,16 +1,15 @@
-### THIS FILE IS DEFAULT UNCHANGED ONE : all overrides are made by environment variables
 ---
 defaultMaxDepth: 10
 defaultLanguage: "en"
 languagesFilePath: null
-updateCheck: true # overriden with MESH_UPDATECHECK by "false"
+updateCheck: true
 vertxOptions:
   workerPoolSize: 20
   eventPoolSize: 8
 tempDirectory: "data/tmp"
 pluginDirectory: "plugins"
 pluginTimeout: 15
-nodeName: "Undulating Luvdisc" # MESH_NODE_NAME
+nodeName: "Scampering Hydreigon"
 httpServer:
   port: 8080
   host: "0.0.0.0"
@@ -23,15 +22,15 @@ httpServer:
 monitoring:
   enabled: true
   port: 8081
-  host: "127.0.0.1" # overriden with MESH_MONITORING_HTTP_HOST by 0.0.0.0
+  host: "127.0.0.1"
 cluster:
-  networkHost: null # overriden with MESH_CLUSTER_NETWORK_HOST by "0.0.0.0"
-  enabled: false # MESH_CLUSTER_ENABLED
-  clusterName: null # MESH_CLUSTER_NAME
-  vertxPort: 0 # overriden with MESH_CLUSTER_VERTX_PORT by 4848 https://github.com/gentics/mesh/issues/519
+  networkHost: null
+  enabled: false
+  clusterName: null
+  vertxPort: 0
 storage:
-  directory: "data/graphdb" # overriden with MESH_GRAPH_DB_DIRECTORY by /graphdb
-  backupDirectory: "data/backup" # overriden with #MESH_GRAPH_BACKUP_DIRECTORY by /backups-nfs/orientdb
+  directory: "data/graphdb"
+  backupDirectory: "data/backup"
   exportDirectory: "data/export"
   startServer: false
   synchronizeWrites: true
@@ -39,7 +38,7 @@ storage:
   txRetryLimit: 10
   parameters: {}
 search:
-  url: null  # override with MESH_ELASTICSEARCH_URL
+  url: null
   username: null
   password: null
   certPath: null
@@ -47,7 +46,7 @@ search:
   hostnameVerification: true
   timeout: 60000
   startupTimeout: 45
-  startEmbedded: false # MESH_ELASTICSEARCH_START_EMBEDDED
+  startEmbedded: false
   embeddedArguments: "-Xms1g -Xmx1g -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75\
     \ -XX:+UseCMSInitiatingOccupancyOnly -XX:+AlwaysPreTouch -client -Xss1m -Djava.awt.headless=true\
     \ -Dfile.encoding=UTF-8 -Djna.nosys=true -XX:-OmitStackTraceInFastThrow -Dio.netty.noUnsafe=true\
@@ -66,14 +65,14 @@ search:
   mappingMode: "DYNAMIC"
 upload:
   byteLimit: 262144000
-  directory: "data/binaryFiles" # overriden with MESH_BINARY_DIR by "/uploads"
+  directory: "data/binaryFiles"
   tempDirectory: "data/tmp/file-uploads"
   parserLimit: 40000
   parser: true
 security:
   tokenExpirationTime: 3600
-  keystorePassword: "MESH_AUTH_KEYSTORE_PASS" # overriden with MESH_AUTH_KEYSTORE_PASS
-  keystorePath: "config/keystore.jceks" # MESH_AUTH_KEYSTORE_PATH
+  keystorePassword: "4c65bebaf4204cb2a5bebaf420ecb2cf"
+  keystorePath: "config/keystore.jceks"
   algorithm: "HS256"
   enableAnonymousAccess: true
   publicKeysPath: "config/public-keys.json"

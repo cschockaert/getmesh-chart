@@ -1,3 +1,9 @@
+# 2.3.0
+* update getmesh to 1.0.1
+
+# 2.2.2
+* update getmesh to 0.41.0
+
 # 2.2.1
 * update getmesh to 0.40.3
 
@@ -37,7 +43,7 @@ k delete cronjobs.batch RELEASE-NAME-backup-cronjob
 # 1.1.0
 * add backup cronjob, (only when nfs is available), backup are stored to nfs volume
 * add restore pod, start it manually with deployment scaling then kubectl exec -ti into pod and invoke /config/restore.sh
-* add backup explorer eg : https://getmesh-backup-explorer.getmesh.gcp.dvl.auchan.net/ so we cant remote dl backup easily
+* add backup explorer eg : https://getmesh-backup-explorer.getmesh.mydomain.com/ so we cant remote dl backup easily
 
 # 1.0.1
 * update getmesh to 0.28.2
