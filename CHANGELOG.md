@@ -1,14 +1,34 @@
+# 3.1.1
+* refacto mesh script and config file
+* only override hazelcast.xml, logback.xml, default-distributed-db-config.json and keystore.jceks
+* bump mesh to 1.4.0
+
+# 3.0.0
+* update healthchecks
+
+# 3.0.2
+* add admin password management
+
+# 3.0.0
+* update mesh to 1.3.2
+
+# 2.3.2
+* add keycloack auth variables
+
+# 2.3.1
+* update mesh to 1.0.2
+
 # 2.3.0
-* update getmesh to 1.0.1
+* update mesh to 1.0.1
 
 # 2.2.2
-* update getmesh to 0.41.0
+* update mesh to 0.41.0
 
 # 2.2.1
-* update getmesh to 0.40.3
+* update mesh to 0.40.3
 
 # 2.2.0
-* update getmesh to 0.40.2
+* update mesh to 0.40.2
 * update elasticsearch to 6.8.2
 
 # 2.1.0

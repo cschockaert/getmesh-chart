@@ -28,21 +28,22 @@ spec:
       initContainers:
       - name: init
         image: "{{ .Values.toolsImage.repository }}:{{ .Values.image.tag }}"
-        command: ["/bin/sh", "/config/init-master-node.sh"]
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/sh", "/usr/local/bin/mesh-init-master-node.sh"]
         securityContext:
           runAsUser: 0
         volumeMounts:
         - name: {{ template "getmesh.nfs.name" . }}
-          mountPath: "/uploads"
+          mountPath: /uploads
           subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
         - name: {{ template "getmesh.nfs.name" . }}
-          mountPath: "/backups-nfs"
+          mountPath: /backups-nfs
           subPath: {{ template "getmesh.fullname.no.override" . }}-backups
         - name: getmesh-config
-          mountPath: /config
+          mountPath: /usr/local/bin
         - name: getmesh-data-master
-          mountPath: "/graphdb"
-          subPath: "graphdb"
+          mountPath: /graphdb
+          subPath: graphdb
         env:
         - name: "REPAIR_DATABASE_BEFORE_STARTUP"
           value: "false"
@@ -50,8 +51,13 @@ spec:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        command: ["/bin/sh", "/config/startup-master-node.sh"]
+        command: ["/bin/sh", "/usr/local/bin/mesh-startup-master-node.sh"]
         env:
+         - name: "MESH_INITIAL_ADMIN_PASSWORD"
+           valueFrom:
+             secretKeyRef:
+               name: {{ template "getmesh.fullname" . }}
+               key: mesh-initial-admin-password
         {{- range $name, $value := .Values.getmesh.coreEnvironmentVariables }}
          - name: {{ tpl $name $ }}
            value: {{ tpl $value $ | quote }}
@@ -59,12 +65,6 @@ spec:
         {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
          - name: {{ tpl $name $ }}
            value: {{ tpl $value $ | quote }}
-        {{- end }}
-        {{- if .Values.oauth2.enabled }}
-         - name: MESH_AUTH_OAUTH2_ENABLED
-           value: "true"
-         - name: MESH_AUTH_OAUTH2_SERVER_CONF_AUTH_SERVER_URL
-           value: {{ tpl .Values.oauth2.authServerUrl . | quote }}
         {{- end }}
         ports:
           - name: http
@@ -84,7 +84,7 @@ spec:
             protocol: TCP
         livenessProbe:
           httpGet:
-            path: {{ .Values.getmesh.master.livenessProbe.httpGet.path | default "/api/v1/" }}
+            path: {{ .Values.getmesh.master.livenessProbe.httpGet.path | default "/api/v2/health/live" }}
             port: http
           initialDelaySeconds: {{ .Values.getmesh.master.livenessProbe.initialDelaySeconds | default 30 }}
           periodSeconds: {{ .Values.getmesh.master.livenessProbe.periodSeconds | default 10 }}
@@ -105,25 +105,36 @@ spec:
 {{ toYaml .Values.getmesh.master.resources | indent 12 }}
         volumeMounts:
           - name: {{ template "getmesh.nfs.name" . }}
-            mountPath: "/uploads"
+            mountPath: /uploads
             subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
           - name: getmesh-config
-            mountPath: "/config"
+            mountPath: /usr/local/bin
+          - name: getmesh-config
+            mountPath: /config/keystore.jceks
+            subPath: keystore.jceks
+          - name: getmesh-config
+            mountPath: /config/default-distributed-db-config.json
+            subPath: default-distributed-db-config.json
+          - name: getmesh-config
+            mountPath: /config/hazelcast.xml
+            subPath: hazelcast.xml
+          - name: getmesh-config
+            mountPath: /config/logback.xml
+            subPath: logback.xml
           - name: getmesh-data-master
-            mountPath: "/elasticsearch/data"
-            subPath: "elasticsearch"
-          - name: getmesh-data-master
-            mountPath: "/graphdb"
-            subPath: "graphdb"
+            mountPath: /graphdb
+            subPath: graphdb
           - name: {{ template "getmesh.nfs.name" . }}
-            mountPath: "/backups-nfs"
+            mountPath: /backups-nfs
             subPath: {{ template "getmesh.fullname.no.override" . }}-backups
-      securityContext:
+      securityContext: # mesh user/group
+        runAsGroup: 1000
         runAsUser: 1000
-        fsGroup: 1000 #user to run used by getmesh official image, if not setted we got some filesystem errors at startup
+        fsGroup: 1000
       volumes:
       - name: getmesh-config
         configMap:
+          defaultMode: 0774
           name: {{ template "getmesh.fullname" . }}-config
       {{- if not .Values.persistence.enabled }}
       - name: getmesh-data-master

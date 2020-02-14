@@ -33,29 +33,31 @@ spec:
       initContainers:
       - name: init
         image: alpine
-        command: ["/bin/sh", "/config/init-slave-node.sh"]
+        command: ["/bin/sh", "/usr/local/bin/mesh-init-slave-node.sh"]
         securityContext:
           runAsUser: 0
         volumeMounts:
-        {{- if and (eq .Values.persistence.nfs.enabled false) (eq .Values.persistence.enabled true) }}
-        # in this particuliar case (persistance without nfs) we use getmesh-data-master to store uploads
-        - name: getmesh-data-master
-        {{- else }}
         - name: getmesh-uploads
-        {{- end }}
-          mountPath: "/uploads"
+          mountPath: /uploads
           subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
         - name: getmesh-config
-          mountPath: /config
+          mountPath: /usr/local/bin
         - name: getmesh-data
-          mountPath: "/graphdb"
-          subPath: "graphdb"
+          mountPath: /graphdb
+          subPath: graphdb
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        command: ["/bin/sh", "/config/startup-slave-node.sh"]
+        command: ["/bin/sh", "/usr/local/bin/mesh-startup-slave-node.sh"]
         env:
+         - name: "MESH_INITIAL_ADMIN_PASSWORD"
+           valueFrom:
+            secretKeyRef:
+              name: {{ template "getmesh.fullname" . }}
+              key: mesh-initial-admin-password
+         - name: MESH_START_IN_READ_ONLY
+           value: "true"
         {{- range $name, $value := .Values.getmesh.coreEnvironmentVariables }}
          - name: {{ tpl $name $ }}
            value: {{ tpl $value $ | quote }}
@@ -63,12 +65,6 @@ spec:
         {{- range $name, $value := .Values.getmesh.additionalEnvironmentVariables }}
          - name: {{ tpl $name $ }}
            value: {{ tpl $value $ | quote }}
-        {{- end }}
-        {{- if .Values.oauth2.enabled }}
-         - name: MESH_AUTH_OAUTH2_ENABLED
-           value: "true"
-         - name: MESH_AUTH_OAUTH2_SERVER_CONF_AUTH_SERVER_URL
-           value: {{ tpl .Values.oauth2.authServerUrl . | quote }}
         {{- end }}
         ports:
           - name: http
@@ -88,14 +84,14 @@ spec:
             protocol: TCP
         livenessProbe:
           httpGet:
-            path: {{ .Values.getmesh.replicas.livenessProbe.httpGet.path | default "/api/v1/" }}
+            path: {{ .Values.getmesh.replicas.livenessProbe.httpGet.path | default "/api/v2/health/live" }}
             port: http
           initialDelaySeconds: {{ .Values.getmesh.replicas.livenessProbe.initialDelaySeconds | default 60 }}
           periodSeconds: {{ .Values.getmesh.replicas.livenessProbe.periodSeconds | default 20 }}
           failureThreshold: {{ .Values.getmesh.replicas.livenessProbe.failureThreshold | default 6 }}
         readinessProbe:
           httpGet:
-            path: {{ .Values.getmesh.replicas.readinessProbe.httpGet.path | default "/api/v1/admin/status" }}
+            path: {{ .Values.getmesh.replicas.readinessProbe.httpGet.path | default "/api/v2/health/ready" }}
             port: http
           initialDelaySeconds:  {{ .Values.getmesh.replicas.readinessProbe.initialDelaySeconds | default 45 }}
           periodSeconds:  {{ .Values.getmesh.replicas.readinessProbe.initialDelaySeconds | default 20 }}
@@ -104,19 +100,33 @@ spec:
 {{ toYaml .Values.getmesh.replicas.resources | indent 12 }}
         volumeMounts:
           - name: getmesh-uploads
-            mountPath: "/uploads"
+            mountPath: /uploads
             subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
           - name: getmesh-config
-            mountPath: "/config"
+            mountPath: /usr/local/bin
+          - name: getmesh-config
+            mountPath: /config/keystore.jceks
+            subPath: keystore.jceks
+          - name: getmesh-config
+            mountPath: /config/default-distributed-db-config.json
+            subPath: default-distributed-db-config.json
+          - name: getmesh-config
+            mountPath: /config/hazelcast.xml
+            subPath: hazelcast.xml
+          - name: getmesh-config
+            mountPath: /config/logback.xml
+            subPath: logback.xml
           - name: getmesh-data
-            mountPath: "/graphdb"
-            subPath: "graphdb"
-      securityContext:
+            mountPath: /graphdb
+            subPath: graphdb
+      securityContext: # mesh user/group
+        runAsGroup: 1000
         runAsUser: 1000
-        fsGroup: 1000 #user to run used by getmesh official image, if not setted we got some filesystem errors at startup
+        fsGroup: 1000
       volumes:
       - name: getmesh-config
         configMap:
+          defaultMode: 0774
           name: {{ template "getmesh.fullname" . }}-config
       {{- if and (eq .Values.persistence.nfs.enabled true) (eq .Values.persistence.enabled true) }}
       - name: getmesh-uploads

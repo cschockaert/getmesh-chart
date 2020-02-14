@@ -4,3 +4,4 @@ config/keystore.jceks
 secrets/
 getmesh-vip/
 values-override*
+config.bak/

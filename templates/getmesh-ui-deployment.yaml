@@ -34,8 +34,12 @@ spec:
             - name: "KC_ENABLED"
               value: {{ .Values.oauth2.enabled | quote }}
             {{- if .Values.oauth2.enabled }}
-            - name: "KC_REALM_URL"
-              value: {{ .Values.oauth2.authServerUrl }}/realms/internal/
+            - name: "KC_URL"
+              value: {{ .Values.oauth2.authServerUrl }}
+            - name: "KC_REALM"
+              value: {{ .Values.oauth2.authServerRealm }}
+            - name: "KC_CLIENT_ID"
+              value: {{ .Values.oauth2.authServerClientId }}
             {{- end }}
           resources:
             limits:

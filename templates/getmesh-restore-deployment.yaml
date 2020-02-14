@@ -29,16 +29,15 @@ spec:
           image: "{{ .Values.toolsImage.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh"]
-          args: ["-c", "while true; do echo 'invoke manually /config/restore.sh inside this pod to restore getmesh to latest available backup'; sleep 30;done"]
+          args: ["-c", "while true; do echo 'invoke manually mesh-restore-latest-blue/green-PROD.sh inside this pod to restore MESH to latest available backup'; sleep 30;done"]
           env:
-          - name: "GETMESH_HOST"
-            value: {{ template "getmesh.fullname" . }}-master.{{ .Release.Namespace }}.svc.cluster.local:8080
-          - name: "ORIENTDB_BACKUP_RESTORE_DIRECTORY"
-            value: "/backups-nfs/orientdb"
-          - name: "BACKUP_HISTORY_FOLDER"
-            value: "/backups-nfs/history"
-          - name: "BACKUP_TMP_FOLDER"
-            value: "/backups-nfs/tmp"
+          - name: "MESH_INITIAL_ADMIN_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "getmesh.fullname" . }}
+                key: mesh-initial-admin-password
+          - name: MESH_START_IN_READ_ONLY
+            value: "true"
         {{- range $name, $value := .Values.getmesh.coreEnvironmentVariables }}
           - name: {{ tpl $name $ }}
             value: {{ tpl $value $ | quote }}
@@ -49,12 +48,24 @@ spec:
         {{- end }}
           volumeMounts:
           - name: getmesh-config
-            mountPath: "/config"
+            mountPath: /usr/local/bin
+          - name: getmesh-config
+            mountPath: /config/keystore.jceks
+            subPath: keystore.jceks
+          - name: getmesh-config
+            mountPath: /config/default-distributed-db-config.json
+            subPath: default-distributed-db-config.json
+          - name: getmesh-config
+            mountPath: /config/hazelcast.xml
+            subPath: hazelcast.xml
+          - name: getmesh-config
+            mountPath: /config/logback.xml
+            subPath: logback.xml
           - name: getmesh-uploads
-            mountPath: "/uploads"
+            mountPath: uploads
             subPath: {{ template "getmesh.fullname.no.override" . }}-uploads
           - name: getmesh-uploads
-            mountPath: "/backups-nfs"
+            mountPath: /backups-nfs
             subPath: {{ template "getmesh.fullname.no.override" . }}-backups
           resources:
             limits:
@@ -63,9 +74,14 @@ spec:
             requests:
               cpu: 100m
               memory: 256Mi
+      securityContext: # mesh user/group
+        runAsGroup: 1000
+        runAsUser: 1000
+        fsGroup: 1000
       volumes:
       - name: getmesh-config
         configMap:
+          defaultMode: 0774
           name: {{ template "getmesh.fullname" . }}-config
       - name: getmesh-uploads
         persistentVolumeClaim:
